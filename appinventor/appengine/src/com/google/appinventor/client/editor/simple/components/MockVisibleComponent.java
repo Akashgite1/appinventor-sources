@@ -1,6 +1,6 @@
 // -*- mode: java; c-basic-offset: 2; -*-
 // Copyright 2009-2011 Google, All Rights reserved
-// Copyright 2011-2024 MIT, All rights reserved
+// Copyright 2011-2026 MIT, All rights reserved
 // Released under the Apache License, Version 2.0
 // http://www.apache.org/licenses/LICENSE-2.0
 
@@ -144,10 +144,10 @@ public abstract class MockVisibleComponent extends MockComponent {
   protected void addWidthHeightProperties() {
     addProperty(PROPERTY_NAME_WIDTH, "" + LENGTH_PREFERRED, MESSAGES.widthPropertyCaption(),
         "Appearance", PropertyTypeConstants.PROPERTY_TYPE_LENGTH, null,
-        new YoungAndroidLengthPropertyEditor());
+        null, new YoungAndroidLengthPropertyEditor());
     addProperty(PROPERTY_NAME_HEIGHT, "" + LENGTH_PREFERRED, MESSAGES.heightPropertyCaption(),
         "Appearance", PropertyTypeConstants.PROPERTY_TYPE_LENGTH, null,
-        new YoungAndroidLengthPropertyEditor());
+        null, new YoungAndroidLengthPropertyEditor());
   }
 
   @Override

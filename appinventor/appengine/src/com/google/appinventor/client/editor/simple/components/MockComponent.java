@@ -1,6 +1,6 @@
 // -*- mode: java; c-basic-offset: 2; -*-
 // Copyright 2009-2011 Google, All Rights reserved
-// Copyright 2011-2022 MIT, All rights reserved
+// Copyright 2011-2026 MIT, All rights reserved
 // Released under the Apache License, Version 2.0
 // http://www.apache.org/licenses/LICENSE-2.0
 
@@ -598,53 +598,23 @@ public abstract class MockComponent extends Composite implements PropertyChangeL
    * @param caption  property's caption for use in the ui
    * @param editorType  editor type for the property
    * @param editorArgs  additional editor arguments
+   * @param description description for this property
    * @param editor  property editor
    */
   public final void addProperty(String name, String defaultValue, String caption, String category,
-                                String editorType, String[] editorArgs, PropertyEditor editor) {
+      String editorType, String[] editorArgs, String description, PropertyEditor editor) {
 
     String propertyDesc = ComponentTranslationTable.getPropertyDescription(name
       + "PropertyDescriptions");
-    if (propertyDesc.equals(name + "PropertyDescriptions")) {
-      propertyDesc = ComponentTranslationTable.getPropertyDescription((type.equals("Form")
-          ? "Screen" : type) + "." + propertyDesc);
-    }
-
-    int propertyType = EditableProperty.TYPE_NORMAL;
-    if (!isPropertyPersisted(name)) {
-      propertyType |= EditableProperty.TYPE_NONPERSISTED;
-    }
-    if (!isPropertyVisible(name)) {
-      propertyType |= EditableProperty.TYPE_INVISIBLE;
-    }
-    if (isPropertyforYail(name)) {
-      propertyType |= EditableProperty.TYPE_DOYAIL;
-    }
-    properties.addProperty(name, defaultValue, ComponentTranslationTable.getPropertyName(caption),
-        ComponentTranslationTable.getCategoryName(category),  propertyDesc, editor, propertyType, editorType, editorArgs);
-  }
-  
-  /**
-   * Extended version of addProperty to support extension metadata descriptions.
-   * Falls back to metadata when translation lookup fails.
-   */
-  public final void addProperty(String name, String defaultValue, String caption, String category,
-                               String editorType, String[] editorArgs, String description, PropertyEditor editor) {
-
-    String propertyDesc = ComponentTranslationTable.getPropertyDescription(name 
-      + "PropertyDescriptions");
-
     // Step 1: component-specific lookup
     if (propertyDesc.equals(name + "PropertyDescriptions")) {
       propertyDesc = ComponentTranslationTable.getPropertyDescription(
-          (type.equals("Form") ? "Screen" : type) + "." + name + "PropertyDescriptions");
+        (type.equals("Form") ? "Screen" : type) + "." + name + "PropertyDescriptions");
     }
-
     // Step 2: fallback for extensions
-    if ((propertyDesc.equals(name + "PropertyDescriptions") ||
-        propertyDesc.equals((type.equals("Form") ? "Screen" : type) + "." + name + "PropertyDescriptions"))
-        && description != null) {
-
+    if ((propertyDesc.equals(name + "PropertyDescriptions")
+          || propertyDesc.equals((type.equals("Form") ? "Screen" : type) + "." + name + "PropertyDescriptions"))
+          && description != null) {
       propertyDesc = description;
     }
 
@@ -658,8 +628,7 @@ public abstract class MockComponent extends Composite implements PropertyChangeL
     if (isPropertyforYail(name)) {
       propertyType |= EditableProperty.TYPE_DOYAIL;
     }
-
-    properties.addProperty(name,defaultValue,ComponentTranslationTable.getPropertyName(caption),
+    properties.addProperty(name, defaultValue, ComponentTranslationTable.getPropertyName(caption),
         ComponentTranslationTable.getCategoryName(category), propertyDesc, editor, propertyType, editorType, editorArgs);
   }
 
@@ -1339,7 +1308,7 @@ public abstract class MockComponent extends Composite implements PropertyChangeL
             (DesignerEditor<?, ?, ?, ?, ?>) editor, property.getEditorArgs());
         addProperty(property.getName(), property.getDefaultValue(), property.getCaption(),
             property.getCategory(), property.getEditorType(),
-            property.getEditorArgs(), propertyEditor);
+            property.getEditorArgs(), property.getDescription(), propertyEditor);
       }
     }
 
