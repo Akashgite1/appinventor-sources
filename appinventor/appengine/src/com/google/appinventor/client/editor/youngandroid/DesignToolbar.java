@@ -249,6 +249,7 @@ public class DesignToolbar extends Toolbar {
       }
       projectEditor.selectFileEditor(currentProject.translationEditor);
       toggleEditor(false);
+      Ode.getInstance().hideTranslationEditorSidebars();
     } else {  // must be View.BLOCKS
       projectEditor.selectFileEditor(screen.blocksEditor);
       toggleEditor(true);
