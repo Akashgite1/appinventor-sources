@@ -97,7 +97,7 @@ public class AttachCompAssets implements AndroidTask {
 
     try {
       Map<String, String> generatedAssets =
-          I18nTranslationAssetGenerator.generate(translationsJson);
+          I18nTranslationAssetGenerator.generateTranslationAssets(translationsJson);
 
       for (Map.Entry<String, String> asset : generatedAssets.entrySet()) {
         File outputFile = new File(mergedAssetDir, asset.getKey());

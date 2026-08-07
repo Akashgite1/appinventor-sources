@@ -6,7 +6,7 @@
 package com.google.appinventor.buildserver.util;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +18,41 @@ import org.json.JSONObject;
 
 /**
  * Converts the combined project translation JSON into compiled per-language assets.
+ *
+ * <p>The input contains translation entries keyed by their stable translation key.
+ * Static entries describe a Designer property in {@code source}, while dynamic
+ * entries contain user-defined base text and placeholders. For example:
+ *
+ * <pre>
+ * {
+ *   "baseLanguage": "en",
+ *   "languages": ["hi", "es"],
+ *   "entries": {
+ *     "submit_button": {
+ *       "kind": "static",
+ *       "source": {
+ *         "screen": "Screen1",
+ *         "component": "Button1",
+ *         "type": "Button",
+ *         "property": "Text",
+ *         "baseText": "Submit"
+ *       },
+ *       "translations": {
+ *         "hi": "Submit Hindi",
+ *         "es": "Enviar"
+ *       }
+ *     },
+ *     "welcome_message": {
+ *       "kind": "dynamic",
+ *       "baseText": "Hello {name}",
+ *       "placeholders": ["name"],
+ *       "translations": {
+ *         "hi": "Hello Hindi {name}"
+ *       }
+ *     }
+ *   }
+ * }
+ * </pre>
  */
 public final class I18nTranslationAssetGenerator {
   static final String MANIFEST_ASSET_PATH = "i18n/manifest.json";
@@ -37,44 +72,51 @@ public final class I18nTranslationAssetGenerator {
    * @return asset paths mapped to their JSON contents
    * @throws JSONException if the input JSON is malformed or contains an invalid language code
    */
-  public static Map<String, String> generate(String translationsJson) throws JSONException {
-    Map<String, String> assets = new LinkedHashMap<String, String>();
+  public static Map<String, String> generateTranslationAssets(
+    String translationsJson) throws JSONException {
+    Map<String, String> translationAssets = new LinkedHashMap<String, String>();
 
     if (translationsJson == null || translationsJson.trim().length() == 0) {
-      return assets;
+      return translationAssets;
     }
 
-    JSONObject root = new JSONObject(translationsJson);
-    String baseLanguage = root.optString("baseLanguage", DEFAULT_BASE_LANGUAGE).trim();
+    JSONObject translationsRoot = new JSONObject(translationsJson);
+    String baseLanguage = translationsRoot.optString("baseLanguage", DEFAULT_BASE_LANGUAGE).trim();
     validateLanguageCode(baseLanguage);
 
-    JSONObject entries = root.optJSONObject("entries");
-    if (entries == null) {
-      entries = new JSONObject();
+    JSONObject translationEntries = translationsRoot.optJSONObject("entries");
+    if (translationEntries == null) {
+      translationEntries = new JSONObject();
     }
 
-    List<String> entryKeys = getSortedKeys(entries);
-    Set<String> languageSet = collectLanguages(root, entries, entryKeys, baseLanguage);
-    List<String> languages = new ArrayList<String>(languageSet);
+    List<String> translationKeys = getTranslationEntryKeys(translationEntries);
+    Set<String> translationLanguages =
+        collectTranslationLanguages(
+            translationsRoot, translationEntries, translationKeys, baseLanguage);
 
-    JSONObject manifest = createManifest(entries, entryKeys, languages, baseLanguage);
-    assets.put(MANIFEST_ASSET_PATH, manifest.toString());
+    JSONObject manifest = createTranslationManifest(
+        translationEntries, translationKeys, translationLanguages, baseLanguage);
 
-    for (String language : languages) {
-      JSONObject languageFile =
-          createLanguageFile(entries, entryKeys, language, baseLanguage);
-      assets.put(getLanguageAssetPath(language), languageFile.toString());
+    translationAssets.put(MANIFEST_ASSET_PATH, manifest.toString());
+
+    for (String language : translationLanguages) {
+      JSONObject languageAsset = createTranslationLanguageAsset(
+          translationEntries, translationKeys, language, baseLanguage);
+
+      translationAssets.put(
+          getLanguageAssetPath(language), languageAsset.toString());
     }
 
-    return assets;
+    return translationAssets;
   }
 
-  private static Set<String> collectLanguages(JSONObject root, JSONObject entries,
-      List<String> entryKeys, String baseLanguage) throws JSONException {
+  private static Set<String> collectTranslationLanguages(
+    JSONObject translationsRoot, JSONObject translationEntries,
+    List<String> translationKeys, String baseLanguage) throws JSONException {
     Set<String> languages = new TreeSet<String>();
     languages.add(baseLanguage);
 
-    JSONArray declaredLanguages = root.optJSONArray("languages");
+    JSONArray declaredLanguages = translationsRoot.optJSONArray("languages");
     if (declaredLanguages != null) {
       for (int i = 0; i < declaredLanguages.length(); i++) {
         String language = declaredLanguages.optString(i, "").trim();
@@ -85,8 +127,8 @@ public final class I18nTranslationAssetGenerator {
       }
     }
 
-    for (String key : entryKeys) {
-      JSONObject entry = entries.optJSONObject(key);
+    for (String key : translationKeys) {
+      JSONObject entry = translationEntries.optJSONObject(key);
       if (entry == null) {
         continue;
       }
@@ -96,7 +138,9 @@ public final class I18nTranslationAssetGenerator {
         continue;
       }
 
-      for (String language : getSortedKeys(translations)) {
+      Iterator<String> languageIterator = translations.keys();
+      while (languageIterator.hasNext()) {
+        String language = languageIterator.next();
         validateLanguageCode(language);
         languages.add(language);
       }
@@ -105,8 +149,9 @@ public final class I18nTranslationAssetGenerator {
     return languages;
   }
 
-  private static JSONObject createManifest(JSONObject entries, List<String> entryKeys,
-      List<String> languages, String baseLanguage) throws JSONException {
+  private static JSONObject createTranslationManifest(
+    JSONObject translationEntries, List<String> translationKeys,
+    Set<String> languages, String baseLanguage) throws JSONException {
     JSONObject manifest = new JSONObject();
     manifest.put("version", MANIFEST_VERSION);
     manifest.put("baseLanguage", baseLanguage);
@@ -118,8 +163,8 @@ public final class I18nTranslationAssetGenerator {
     manifest.put("languages", languagePaths);
 
     JSONObject manifestEntries = new JSONObject();
-    for (String key : entryKeys) {
-      JSONObject entry = entries.optJSONObject(key);
+    for (String key : translationKeys) {
+      JSONObject entry = translationEntries.optJSONObject(key);
       if (entry == null) {
         continue;
       }
@@ -131,7 +176,7 @@ public final class I18nTranslationAssetGenerator {
       }
 
       if ("dynamic".equals(kind)) {
-        metadata.put("baseText", getBaseText(entry));
+        metadata.put("baseText", getTranslationBaseText(entry));
 
         JSONArray placeholders = entry.optJSONArray("placeholders");
         metadata.put("placeholders",
@@ -147,15 +192,17 @@ public final class I18nTranslationAssetGenerator {
     }
 
     manifest.put("entries", manifestEntries);
+
     return manifest;
   }
 
-  private static JSONObject createLanguageFile(JSONObject entries, List<String> entryKeys,
-      String language, String baseLanguage) throws JSONException {
-    JSONObject languageEntries = new JSONObject();
+  private static JSONObject createTranslationLanguageAsset(
+    JSONObject translationEntries, List<String> translationKeys, String language,
+    String baseLanguage) throws JSONException {
 
-    for (String key : entryKeys) {
-      JSONObject entry = entries.optJSONObject(key);
+    JSONObject languageEntries = new JSONObject();
+    for (String key : translationKeys) {
+      JSONObject entry = translationEntries.optJSONObject(key);
       if (entry == null) {
         continue;
       }
@@ -164,7 +211,7 @@ public final class I18nTranslationAssetGenerator {
       String value = translations == null ? "" : translations.optString(language, "");
 
       if (value.length() == 0 && language.equals(baseLanguage)) {
-        value = getBaseText(entry);
+        value = getTranslationBaseText(entry);
       }
 
       if (value.length() > 0) {
@@ -172,14 +219,14 @@ public final class I18nTranslationAssetGenerator {
       }
     }
 
-    JSONObject languageFile = new JSONObject();
-    languageFile.put("version", LANGUAGE_FILE_VERSION);
-    languageFile.put("language", language);
-    languageFile.put("entries", languageEntries);
-    return languageFile;
+    JSONObject languageAsset = new JSONObject();
+    languageAsset.put("version", LANGUAGE_FILE_VERSION);
+    languageAsset.put("language", language);
+    languageAsset.put("entries", languageEntries);
+    return languageAsset;
   }
 
-  private static String getBaseText(JSONObject entry) {
+  private static String getTranslationBaseText(JSONObject entry) {
     String baseText = entry.optString("baseText", "");
     if (baseText.length() > 0) {
       return baseText;
@@ -199,19 +246,14 @@ public final class I18nTranslationAssetGenerator {
     }
   }
 
-  private static List<String> getSortedKeys(JSONObject object) {
-    List<String> keys = new ArrayList<String>();
+  private static List<String> getTranslationEntryKeys(JSONObject translationEntries) {
+    List<String> translationKeys = new ArrayList<String>();
+    Iterator<String> iterator = translationEntries.keys();
 
-    if (object == null) {
-      return keys;
-    }
-
-    java.util.Iterator<String> iterator = object.keys();
     while (iterator.hasNext()) {
-      keys.add(iterator.next());
+      translationKeys.add(iterator.next());
     }
 
-    Collections.sort(keys);
-    return keys;
+    return translationKeys;
   }
 }

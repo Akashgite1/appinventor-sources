@@ -20,7 +20,7 @@ public class I18nTranslationAssetGeneratorTest {
   @Test
   public void generatesManifestAndPerLanguageFiles() throws Exception {
     Map<String, String> assets =
-        I18nTranslationAssetGenerator.generate(createTranslationsJson());
+        I18nTranslationAssetGenerator.generateTranslationAssets(createTranslationsJson());
 
     assertEquals(4, assets.size());
     assertTrue(assets.containsKey("i18n/manifest.json"));
@@ -55,7 +55,7 @@ public class I18nTranslationAssetGeneratorTest {
   @Test
   public void createsBaseLanguageValuesFromBaseText() throws Exception {
     Map<String, String> assets =
-        I18nTranslationAssetGenerator.generate(createTranslationsJson());
+        I18nTranslationAssetGenerator.generateTranslationAssets(createTranslationsJson());
 
     JSONObject english =
         new JSONObject(assets.get("i18n/languages/en.json"));
@@ -68,7 +68,7 @@ public class I18nTranslationAssetGeneratorTest {
   @Test
   public void omitsMissingValuesFromNonBaseLanguage() throws Exception {
     Map<String, String> assets =
-        I18nTranslationAssetGenerator.generate(createTranslationsJson());
+        I18nTranslationAssetGenerator.generateTranslationAssets(createTranslationsJson());
 
     JSONObject spanish =
         new JSONObject(assets.get("i18n/languages/es.json"));
@@ -96,7 +96,7 @@ public class I18nTranslationAssetGeneratorTest {
     root.put("entries", entries);
 
     Map<String, String> assets =
-        I18nTranslationAssetGenerator.generate(root.toString());
+        I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
 
     JSONObject manifest =
         new JSONObject(assets.get("i18n/manifest.json"));
@@ -114,8 +114,8 @@ public class I18nTranslationAssetGeneratorTest {
 
   @Test
   public void returnsNoAssetsForEmptyInput() throws Exception {
-    assertTrue(I18nTranslationAssetGenerator.generate("").isEmpty());
-    assertTrue(I18nTranslationAssetGenerator.generate(null).isEmpty());
+    assertTrue(I18nTranslationAssetGenerator.generateTranslationAssets("").isEmpty());
+    assertTrue(I18nTranslationAssetGenerator.generateTranslationAssets(null).isEmpty());
   }
 
   @Test
@@ -126,7 +126,7 @@ public class I18nTranslationAssetGeneratorTest {
     root.put("entries", new JSONObject());
 
     Map<String, String> assets =
-        I18nTranslationAssetGenerator.generate(root.toString());
+        I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
 
     assertTrue(assets.containsKey("i18n/languages/pt-BR.json"));
 
@@ -142,7 +142,7 @@ public class I18nTranslationAssetGeneratorTest {
     root.put("languages", new JSONArray().put("../hi"));
     root.put("entries", new JSONObject());
 
-    I18nTranslationAssetGenerator.generate(root.toString());
+    I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
   }
 
   private static String createTranslationsJson() throws JSONException {
