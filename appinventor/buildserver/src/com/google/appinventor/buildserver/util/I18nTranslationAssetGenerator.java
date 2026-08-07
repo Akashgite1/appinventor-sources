@@ -19,40 +19,9 @@ import org.json.JSONObject;
 /**
  * Converts the combined project translation JSON into compiled per-language assets.
  *
- * <p>The input contains translation entries keyed by their stable translation key.
- * Static entries describe a Designer property in {@code source}, while dynamic
- * entries contain user-defined base text and placeholders. For example:
- *
- * <pre>
- * {
- *   "baseLanguage": "en",
- *   "languages": ["hi", "es"],
- *   "entries": {
- *     "submit_button": {
- *       "kind": "static",
- *       "source": {
- *         "screen": "Screen1",
- *         "component": "Button1",
- *         "type": "Button",
- *         "property": "Text",
- *         "baseText": "Submit"
- *       },
- *       "translations": {
- *         "hi": "Submit Hindi",
- *         "es": "Enviar"
- *       }
- *     },
- *     "welcome_message": {
- *       "kind": "dynamic",
- *       "baseText": "Hello {name}",
- *       "placeholders": ["name"],
- *       "translations": {
- *         "hi": "Hello Hindi {name}"
- *       }
- *     }
- *   }
- * }
- * </pre>
+ * <p>The input contains a base language, configured translation languages, and
+ * translation entries keyed by their stable translation key. Static entries store
+ * Designer source metadata, while dynamic entries store base text and placeholders.
  */
 public final class I18nTranslationAssetGenerator {
   static final String MANIFEST_ASSET_PATH = "i18n/manifest.json";
