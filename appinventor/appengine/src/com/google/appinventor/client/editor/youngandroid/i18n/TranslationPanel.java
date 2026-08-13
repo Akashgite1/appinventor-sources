@@ -27,7 +27,6 @@ import com.google.gwt.user.client.ui.ListBox;
 import com.google.gwt.user.client.ui.TextArea;
 import com.google.gwt.user.client.ui.TextBox;
 import com.google.gwt.user.client.ui.VerticalPanel;
-import com.google.gwt.user.client.Command;
 import com.google.gwt.user.client.Window;
 
 import java.util.ArrayList;
@@ -86,7 +85,7 @@ public final class TranslationPanel extends Composite {
 
     Label description = new Label(
         "This table lists translatable Designer properties and assigns safe internal "
-            + "translation keys. Translation values are stored in project settings.");
+            + "translation keys. Translation changes are saved automatically.");
 
     table.setStylePrimaryName("ode-i18n-table");
     table.setWidth("100%");
@@ -98,14 +97,6 @@ public final class TranslationPanel extends Composite {
       showJsonDialog("Export Translation JSON",
           "Copy or inspect the current i18n JSON below.",
           exportJson());
-      }
-    });
-
-    Button saveButton = new Button("Save JSON");
-    saveButton.addClickHandler(new ClickHandler() {
-      @Override
-      public void onClick(ClickEvent event) {
-        saveJson();
       }
     });
 
@@ -158,6 +149,7 @@ public final class TranslationPanel extends Composite {
         addLanguage(languageTextBox.getValue(), true);
         languageTextBox.setValue("");
         refresh();
+        updateTranslationsSetting();
       }
     });
 
@@ -186,7 +178,6 @@ public final class TranslationPanel extends Composite {
     root.add(languageTextBox);
     root.add(addLanguageButton);
     root.add(exportButton);
-    root.add(saveButton);
     root.add(languagesLabel);
     root.add(languageListBox);
     root.add(deleteLanguageButton);
@@ -332,44 +323,11 @@ public final class TranslationPanel extends Composite {
     dialog.center();
   }
 
-  private void saveJsonSilently() {
-    String json = exportJson();
-
+  private void updateTranslationsSetting() {
     projectEditor.changeProjectSettingsProperty(
         SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
         SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS,
-        json);
-
-    projectEditor.saveProjectSettings(null);
-  }
-
-  private void saveJson() {
-    final String json = exportJson();
-
-    String currentJson = projectEditor.getProjectSettingsProperty(
-        SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
-
-    projectEditor.changeProjectSettingsProperty(
-        SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS,
-        json);
-
-    if (json.equals(currentJson)) {
-      showJsonDialog("Translations Saved",
-          "No translation changes were pending.",
-          json);
-      return;
-    }
-
-    projectEditor.saveProjectSettings(new Command() {
-      @Override
-      public void execute() {
-        showJsonDialog("Translations Saved",
-            "Saved translations to project settings.",
-            json);
-      }
-    });
+        exportJson());
   }
 
   private String getJsonString(JSONObject object, String name) {
@@ -497,6 +455,14 @@ public final class TranslationPanel extends Composite {
     }
   }
 
+  /**
+   * Rebuilds translations after a Designer change and schedules project-settings autosave.
+   */
+  public void handleDesignerContentChanged() {
+    refresh();
+    updateTranslationsSetting();
+  }
+
   public void handleComponentRenamed(String screenName, String oldName, String newName) {
     loadSavedTranslations();
 
@@ -533,7 +499,7 @@ public final class TranslationPanel extends Composite {
     refresh();
 
     if (changed) {
-      saveJsonSilently();
+      updateTranslationsSetting();
     }
   }
 
@@ -570,7 +536,7 @@ public final class TranslationPanel extends Composite {
     refresh();
 
     if (changed) {
-      saveJsonSilently();
+      updateTranslationsSetting();
     }
   }
 
@@ -697,6 +663,7 @@ public final class TranslationPanel extends Composite {
     dynamicPlaceholdersTextBox.setValue("");
 
     refresh();
+    updateTranslationsSetting();
   }
 
   private void deleteDynamicTranslationEntry(String key) {
@@ -713,6 +680,7 @@ public final class TranslationPanel extends Composite {
     translationValues.remove(key);
 
     refresh();
+    updateTranslationsSetting();
   }
 
   private boolean isValidDynamicKey(String key) {
@@ -839,6 +807,7 @@ public final class TranslationPanel extends Composite {
 
     selectedLanguage = languages.get(0);
     refresh();
+    updateTranslationsSetting();
   }
 
   private String getTranslationValue(String translationKey, String language) {
@@ -877,6 +846,7 @@ public final class TranslationPanel extends Composite {
       @Override
       public void onChange(ChangeEvent event) {
         setTranslationValue(translationKey, language, textBox.getValue());
+        updateTranslationsSetting();
       }
     });
 
