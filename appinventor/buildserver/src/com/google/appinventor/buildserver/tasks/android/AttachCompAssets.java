@@ -12,12 +12,16 @@ import com.google.appinventor.buildserver.context.AndroidCompilerContext;
 import com.google.appinventor.buildserver.interfaces.AndroidTask;
 import com.google.appinventor.buildserver.interfaces.BuildType;
 import com.google.appinventor.buildserver.util.ExecutorUtils;
+import com.google.appinventor.buildserver.util.I18nTranslationAssetGenerator;
 
 import com.google.common.io.Files;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+import org.json.JSONException;
 
 /**
  * compiler.attachCompAssets()
@@ -25,9 +29,6 @@ import java.nio.charset.StandardCharsets;
 
 @BuildType(apk = true, aab = true)
 public class AttachCompAssets implements AndroidTask {
-
-  private static final String I18N_ASSET_DIRECTORY = "i18n";
-  private static final String I18N_TRANSLATIONS_FILE = "translations.json";
 
   @Override
   public TaskResult execute(AndroidCompilerContext context) {
@@ -73,7 +74,7 @@ public class AttachCompAssets implements AndroidTask {
           }
         }
       }
-      writeI18nTranslationsAsset(context, mergedAssetDir);
+      writeI18nTranslationAssets(context, mergedAssetDir);
     } catch (IOException e) {
       context.getReporter().error("There was an unknown error while processing assets", true);
       return TaskResult.generateError(e);
@@ -83,7 +84,7 @@ public class AttachCompAssets implements AndroidTask {
   }
 
   // TODO: Generate per-locale values-*/strings.xml resources once the i18n packaging format is finalized.
-  private void writeI18nTranslationsAsset(AndroidCompilerContext context, File mergedAssetDir)
+  private void writeI18nTranslationAssets(AndroidCompilerContext context, File mergedAssetDir)
       throws IOException {
     String translationsJson = context.getProject().getI18nTranslations();
 
@@ -94,12 +95,21 @@ public class AttachCompAssets implements AndroidTask {
       return;
     }
 
-    File i18nDir = ExecutorUtils.createDir(mergedAssetDir, I18N_ASSET_DIRECTORY);
-    File translationsFile = new File(i18nDir, I18N_TRANSLATIONS_FILE);
+    try {
+      Map<String, String> generatedAssets =
+          I18nTranslationAssetGenerator.generateTranslationAssets(translationsJson);
 
-    context.getReporter().info("Writing i18n translations asset to "
-        + translationsFile.getAbsolutePath());
+      for (Map.Entry<String, String> asset : generatedAssets.entrySet()) {
+        File outputFile = new File(mergedAssetDir, asset.getKey());
+        Files.createParentDirs(outputFile);
 
-    Files.write(translationsJson.getBytes(StandardCharsets.UTF_8), translationsFile);
+        context.getReporter().info("Writing generated i18n asset to "
+            + outputFile.getAbsolutePath());
+
+        Files.write(asset.getValue().getBytes(StandardCharsets.UTF_8), outputFile);
+      }
+    } catch (JSONException e) {
+      throw new IOException("Unable to generate per-language i18n assets", e);
+    }
   }
 }
