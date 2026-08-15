@@ -287,11 +287,8 @@ public final class TranslationPanel extends Composite {
 
       if (componentNames.isEmpty()) {
         table.setText(row, 0, formName);
-        table.setText(row, 1, "");
-        table.setText(row, 2, "");
-        table.setText(row, 3, "");
-        table.setText(row, 4, "");
-        table.setText(row, 5, "No components found");
+        table.setText(row, 1, "No components found");
+        table.getFlexCellFormatter().setColSpan(row, 1, 5);
         row++;
         continue;
       }
@@ -316,10 +313,8 @@ public final class TranslationPanel extends Composite {
           table.setText(row, 1, componentName);
           table.setText(row, 2, componentType);
           table.setText(row, 3, propertyName);
-          table.setText(row, 4, generatedKey);
-          table.setText(row, 5, propertyValue);
-          table.setWidget(row, 6, createTranslationTextBox(generatedKey, selectedLanguage));
-          table.setText(row, 7, "");
+          table.setText(row, 4, propertyValue);
+          table.setWidget(row, 5,createTranslationTextBox(generatedKey, selectedLanguage));
           row++;
         }
       }
@@ -405,15 +400,16 @@ public final class TranslationPanel extends Composite {
     }
   }
 
+  /**
+   * Adds the column headings for Designer-property translations.
+   */
   private void addHeader() {
     table.setText(0, 0, "Screen");
     table.setText(0, 1, "Component");
     table.setText(0, 2, "Type");
     table.setText(0, 3, "Property");
-    table.setText(0, 4, "Internal Key");
-    table.setText(0, 5, "Base Text");
-    table.setText(0, 6, selectedLanguage);
-    table.setText(0, 7, "Actions");
+    table.setText(0, 4, "Base Text");
+    table.setText(0, 5, selectedLanguage);
     table.getRowFormatter().setStylePrimaryName(0, "ode-i18n-table-header");
   }
 
