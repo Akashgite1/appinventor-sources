@@ -37,10 +37,19 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 public final class TranslationPanel extends Composite {
-  private static final String DEFAULT_LANGUAGE = "hi";
 
+  /**
+   * Identifies the translation workspace currently displayed.
+   */
+  private enum TranslationWorkspaceMode {
+    STATIC_TRANSLATIONS,
+    DYNAMIC_TRANSLATIONS
+  }
+
+  private static final String DEFAULT_LANGUAGE = "hi";
   private final YaProjectEditor projectEditor;
   private final FlexTable table;
+  private final FlexTable dynamicTranslationsTable;
   private final Map<String, Map<String, String>> translationValues;
   private final Map<String, TranslationEntry> translationEntries;
   private final Map<String, DynamicTranslationEntry> dynamicTranslationEntries;
@@ -53,6 +62,10 @@ public final class TranslationPanel extends Composite {
   private String selectedLanguage;
   private static final String LOCATOR_SEPARATOR = "\u0000";
   private final Map<String, String> locatorToTranslationKey;
+  private final TranslationWorkspaceToolbar translationWorkspaceToolbar;
+  private final StaticTranslationsWorkspace staticTranslationsWorkspace;
+  private final DynamicTranslationsWorkspace dynamicTranslationsWorkspace;
+  private TranslationWorkspaceMode activeTranslationWorkspaceMode;
 
   private boolean savedTranslationsLoaded;
 
@@ -61,6 +74,7 @@ public final class TranslationPanel extends Composite {
   public TranslationPanel(YaProjectEditor projectEditor) {
     this.projectEditor = projectEditor;
     this.table = new FlexTable();
+    this.dynamicTranslationsTable = new FlexTable();
     this.translationValues = new HashMap<String, Map<String, String>>();
     this.translationEntries = new HashMap<String, TranslationEntry>();
     this.dynamicTranslationEntries = new HashMap<String, DynamicTranslationEntry>();
@@ -74,21 +88,28 @@ public final class TranslationPanel extends Composite {
     this.dynamicBaseTextBox = new TextBox();
     this.dynamicPlaceholdersTextBox = new TextBox();
     this.locatorToTranslationKey = new HashMap<String, String>();
+    this.activeTranslationWorkspaceMode = TranslationWorkspaceMode.STATIC_TRANSLATIONS;
 
     FlowPanel root = new FlowPanel();
     root.setStylePrimaryName("ode-i18n-panel");
     root.setWidth("100%");
     root.setHeight("100%");
 
+    FlowPanel translationPageHeader = new FlowPanel();
+    translationPageHeader.setStylePrimaryName(
+        "ode-i18n-page-header");
+
     Label title = new Label("Translations");
     title.setStylePrimaryName("ode-i18n-title");
 
     Label description = new Label(
-        "This table lists translatable Designer properties and assigns safe internal "
-            + "translation keys. Translation changes are saved automatically.");
+        "Translate your app's text into multiple languages. "
+            + "Changes are saved automatically.");
+    description.setStylePrimaryName(
+        "ode-i18n-page-description");
 
-    table.setStylePrimaryName("ode-i18n-table");
-    table.setWidth("100%");
+    translationPageHeader.add(title);
+    translationPageHeader.add(description);
 
     Button exportButton = new Button("Export JSON");
     exportButton.addClickHandler(new ClickHandler() {
@@ -99,16 +120,6 @@ public final class TranslationPanel extends Composite {
           exportJson());
       }
     });
-
-    root.add(title);
-    root.add(description);
-
-    Label dynamicLabel = new Label("Dynamic translations:");
-    dynamicLabel.setStylePrimaryName("ode-i18n-subtitle");
-
-    Label dynamicHelpLabel = new Label(
-        "Create user-defined message keys for runtime lookup. "
-            + "Example key: welcome_message, base text: Hello {name}, placeholders: name");
 
     dynamicKeyTextBox.setWidth("180px");
     dynamicKeyTextBox.getElement().setPropertyString("placeholder", "welcome_message");
@@ -127,19 +138,6 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    root.add(dynamicLabel);
-    root.add(dynamicHelpLabel);
-    root.add(new Label("Key:"));
-    root.add(dynamicKeyTextBox);
-    root.add(new Label("Base text:"));
-    root.add(dynamicBaseTextBox);
-    root.add(new Label("Placeholders:"));
-    root.add(dynamicPlaceholdersTextBox);
-    root.add(addDynamicButton);
-
-    root.add(table);
-
-    Label languageLabel = new Label("Language code, e.g. hi, es, pt-BR:");
     languageTextBox.setWidth("80px");
 
     Button addLanguageButton = new Button("Add Language");
@@ -153,7 +151,6 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    Label languagesLabel = new Label("Languages:");
     languageListBox.setVisibleItemCount(1);
     languageListBox.addChangeHandler(new ChangeHandler() {
       @Override
@@ -174,18 +171,103 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    root.add(languageLabel);
-    root.add(languageTextBox);
-    root.add(addLanguageButton);
-    root.add(exportButton);
-    root.add(languagesLabel);
-    root.add(languageListBox);
-    root.add(deleteLanguageButton);
+    translationWorkspaceToolbar =
+        new TranslationWorkspaceToolbar();
+
+    translationWorkspaceToolbar.addStaticTranslationsClickHandler(
+        new ClickHandler() {
+          @Override
+          public void onClick(ClickEvent event) {
+            showStaticTranslationsWorkspace();
+          }
+        });
+
+    translationWorkspaceToolbar.addDynamicTranslationsClickHandler(
+        new ClickHandler() {
+          @Override
+          public void onClick(ClickEvent event) {
+            showDynamicTranslationsWorkspace();
+          }
+        });
+
+    TranslationLanguageSidebar translationLanguageSidebar =
+        new TranslationLanguageSidebar(
+            languageListBox,
+            languageTextBox,
+            addLanguageButton,
+            deleteLanguageButton,
+            exportButton);
+
+    staticTranslationsWorkspace =
+        new StaticTranslationsWorkspace(table);
+
+    dynamicTranslationsWorkspace =
+        new DynamicTranslationsWorkspace(
+            dynamicKeyTextBox,
+            dynamicBaseTextBox,
+            dynamicPlaceholdersTextBox,
+            addDynamicButton,
+            dynamicTranslationsTable);
+
+    FlowPanel activeWorkspaceContainer = new FlowPanel();
+    activeWorkspaceContainer.setStylePrimaryName(
+        "ode-i18n-active-workspace");
+    activeWorkspaceContainer.add(staticTranslationsWorkspace);
+    activeWorkspaceContainer.add(dynamicTranslationsWorkspace);
+
+    FlowPanel workspaceLayout = new FlowPanel();
+    workspaceLayout.setStylePrimaryName(
+        "ode-i18n-workspace-layout");
+    workspaceLayout.add(translationLanguageSidebar);
+    workspaceLayout.add(activeWorkspaceContainer);
+
+    root.add(translationPageHeader);
+    root.add(translationWorkspaceToolbar);
+    root.add(workspaceLayout);
+
+    updateVisibleTranslationWorkspace();
 
     initWidget(root);
   }
 
+  /**
+   * Displays translations generated from Designer properties.
+   */
+  private void showStaticTranslationsWorkspace() {
+    activeTranslationWorkspaceMode =
+        TranslationWorkspaceMode.STATIC_TRANSLATIONS;
+    updateVisibleTranslationWorkspace();
+  }
 
+  /**
+   * Displays translations created for runtime lookup.
+   */
+  private void showDynamicTranslationsWorkspace() {
+    activeTranslationWorkspaceMode =
+        TranslationWorkspaceMode.DYNAMIC_TRANSLATIONS;
+    updateVisibleTranslationWorkspace();
+  }
+
+  /**
+   * Synchronizes workspace visibility and toolbar presentation.
+   */
+  private void updateVisibleTranslationWorkspace() {
+    boolean staticTranslationsVisible =
+        activeTranslationWorkspaceMode
+            == TranslationWorkspaceMode.STATIC_TRANSLATIONS;
+
+    staticTranslationsWorkspace.setVisible(
+        staticTranslationsVisible);
+    dynamicTranslationsWorkspace.setVisible(
+        !staticTranslationsVisible);
+
+    translationWorkspaceToolbar.setStaticTranslationsActive(
+        staticTranslationsVisible);
+    translationWorkspaceToolbar.setDynamicTranslationsActive(
+        !staticTranslationsVisible);
+    translationWorkspaceToolbar.setSelectedLanguage(
+        selectedLanguage);
+  }
 
   public void refresh() {
     loadSavedTranslations();
@@ -242,39 +324,85 @@ public final class TranslationPanel extends Composite {
         }
       }
     }
-    addDynamicRows(row);
+    refreshDynamicTranslationsTable();
+    updateVisibleTranslationWorkspace();
   }
 
-  private int addDynamicRows(int row) {
-    ArrayList<String> keys = new ArrayList<String>(dynamicTranslationEntries.keySet());
-    Collections.sort(keys);
+  /**
+   * Rebuilds the table containing runtime translation entries.
+   */
+  private void refreshDynamicTranslationsTable() {
+    clearDynamicTranslationsTable();
 
-    for (final String key : keys) {
-      DynamicTranslationEntry entry = dynamicTranslationEntries.get(key);
-      if (entry == null) {
+    dynamicTranslationsTable.setText(0, 0, "Key");
+    dynamicTranslationsTable.setText(0, 1, "Base Text");
+    dynamicTranslationsTable.setText(0, 2, selectedLanguage);
+    dynamicTranslationsTable.setText(0, 3, "Actions");
+    dynamicTranslationsTable.getRowFormatter().setStylePrimaryName(
+        0, "ode-i18n-table-header");
+
+    ArrayList<String> dynamicTranslationKeys =
+        new ArrayList<String>(dynamicTranslationEntries.keySet());
+    Collections.sort(dynamicTranslationKeys);
+
+    int dynamicTranslationRow = 1;
+
+    for (final String dynamicTranslationKey :
+        dynamicTranslationKeys) {
+      DynamicTranslationEntry dynamicTranslationEntry =
+          dynamicTranslationEntries.get(dynamicTranslationKey);
+
+      if (dynamicTranslationEntry == null) {
         continue;
       }
 
-      Button deleteButton = new Button("Delete");
-      deleteButton.addClickHandler(new ClickHandler() {
-        @Override
-        public void onClick(ClickEvent event) {
-          deleteDynamicTranslationEntry(key);
-        }
-      });
+      Button deleteDynamicTranslationButton =
+          new Button("Delete");
+      deleteDynamicTranslationButton.addClickHandler(
+          new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+              deleteDynamicTranslationEntry(
+                  dynamicTranslationKey);
+            }
+          });
 
-      table.setText(row, 0, "Dynamic");
-      table.setText(row, 1, "");
-      table.setText(row, 2, "Dynamic");
-      table.setText(row, 3, "Message");
-      table.setText(row, 4, key);
-      table.setText(row, 5, entry.getBaseText());
-      table.setWidget(row, 6, createTranslationTextBox(key, selectedLanguage));
-      table.setWidget(row, 7, deleteButton);
-      row++;
+      dynamicTranslationsTable.setText(
+          dynamicTranslationRow,
+          0,
+          dynamicTranslationKey);
+      dynamicTranslationsTable.setText(
+          dynamicTranslationRow,
+          1,
+          dynamicTranslationEntry.getBaseText());
+      dynamicTranslationsTable.setWidget(
+          dynamicTranslationRow,
+          2,
+          createTranslationTextBox(
+              dynamicTranslationKey, selectedLanguage));
+      dynamicTranslationsTable.setWidget(
+          dynamicTranslationRow,
+          3,
+          deleteDynamicTranslationButton);
+
+      dynamicTranslationRow++;
     }
 
-    return row;
+    if (dynamicTranslationRow == 1) {
+      dynamicTranslationsTable.setText(
+          1, 0, "No dynamic translations found.");
+      dynamicTranslationsTable.getFlexCellFormatter().setColSpan(
+          1, 0, 4);
+    }
+  }
+
+  /**
+   * Removes all rendered rows before rebuilding the dynamic table.
+   */
+  private void clearDynamicTranslationsTable() {
+    while (dynamicTranslationsTable.getRowCount() > 0) {
+      dynamicTranslationsTable.removeRow(0);
+    }
   }
 
   private void addHeader() {
