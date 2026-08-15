@@ -483,6 +483,7 @@ public class Ode implements EntryPoint {
   }
 
   public void showComponentDesigner() {
+    structureAndAssets.setVisible(true);
     paletteBox.setVisible(true);
     sourceStructureBox.setVisible(true);
     propertiesBox.setVisible(true);
@@ -498,6 +499,7 @@ public class Ode implements EntryPoint {
   }
 
   public void hideComponentDesigner() {
+    structureAndAssets.setVisible(true);
     paletteBox.setVisible(false);
     sourceStructureBox.setVisible(false);
     propertiesBox.setVisible(false);
@@ -510,6 +512,14 @@ public class Ode implements EntryPoint {
         LOG.warning("visibleComponentsPanel is null in hideComponentDesigner");
       }
     }
+  }
+
+  /**
+   * Hides all shared Designer and Blocks sidebars for the Translation editor.
+   */
+  public void hideTranslationEditorSidebars() {
+    hideComponentDesigner();
+    structureAndAssets.setVisible(false);
   }
 
   /**
