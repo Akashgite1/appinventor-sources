@@ -49,6 +49,7 @@ public final class TranslationPanel extends Composite {
   }
 
   private static final String DEFAULT_LANGUAGE = "hi";
+  private static final int TRANSLATIONS_PER_PAGE = 20;
   private final YaProjectEditor projectEditor;
   private final FlexTable table;
   private final FlexTable dynamicTranslationsTable;
@@ -71,6 +72,8 @@ public final class TranslationPanel extends Composite {
   private TranslationWorkspaceMode activeTranslationWorkspaceMode;
   private String staticTranslationsSearchQuery;
   private String dynamicTranslationsSearchQuery;
+  private int staticTranslationsPageIndex;
+  private int dynamicTranslationsPageIndex;
 
   private boolean savedTranslationsLoaded;
 
@@ -96,6 +99,8 @@ public final class TranslationPanel extends Composite {
     this.staticTranslationEntryOrder = new ArrayList<String>();
     this.staticTranslationsSearchQuery = "";
     this.dynamicTranslationsSearchQuery = "";
+    this.staticTranslationsPageIndex = 0;
+    this.dynamicTranslationsPageIndex = 0;
     this.activeTranslationWorkspaceMode = TranslationWorkspaceMode.STATIC_TRANSLATIONS;
 
     FlowPanel root = new FlowPanel();
@@ -222,6 +227,22 @@ public final class TranslationPanel extends Composite {
         }
     });
 
+    staticTranslationsWorkspace.addPreviousPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showPreviousStaticTranslationsPage();
+        }
+    });
+
+    staticTranslationsWorkspace.addNextPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showNextStaticTranslationsPage();
+        }
+    });
+
     dynamicTranslationsWorkspace = new DynamicTranslationsWorkspace(
             dynamicKeyTextBox,
             dynamicBaseTextBox,
@@ -240,9 +261,25 @@ public final class TranslationPanel extends Composite {
     dynamicTranslationsWorkspace.addSearchClickHandler(
       new ClickHandler() {
         @Override
-          public void onClick(ClickEvent event) {
-            applyDynamicTranslationsSearch();
-      }
+        public void onClick(ClickEvent event) {
+          applyDynamicTranslationsSearch();
+        }
+    });
+
+    dynamicTranslationsWorkspace.addPreviousPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showPreviousDynamicTranslationsPage();
+        }
+    });
+
+    dynamicTranslationsWorkspace.addNextPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showNextDynamicTranslationsPage();
+        }
     });
 
     FlowPanel activeWorkspaceContainer = new FlowPanel();
@@ -297,12 +334,48 @@ public final class TranslationPanel extends Composite {
 
   private void applyStaticTranslationsSearch() {
     staticTranslationsSearchQuery = staticTranslationsWorkspace.getSearchQuery();
+    staticTranslationsPageIndex = 0;
     refreshStaticTranslationsTable();
   }
 
   private void applyDynamicTranslationsSearch() {
     dynamicTranslationsSearchQuery = dynamicTranslationsWorkspace.getSearchQuery();
+    dynamicTranslationsPageIndex = 0;
     refreshDynamicTranslationsTable();
+  }
+
+  private void showPreviousStaticTranslationsPage() {
+    if (staticTranslationsPageIndex > 0) {
+      staticTranslationsPageIndex--;
+      refreshStaticTranslationsTable();
+    }
+  }
+
+  private void showNextStaticTranslationsPage() {
+    int totalPages =
+        getPaginationPageCount(getFilteredStaticTranslationKeys().size());
+
+    if (staticTranslationsPageIndex + 1 < totalPages) {
+      staticTranslationsPageIndex++;
+      refreshStaticTranslationsTable();
+    }
+  }
+
+  private void showPreviousDynamicTranslationsPage() {
+    if (dynamicTranslationsPageIndex > 0) {
+      dynamicTranslationsPageIndex--;
+      refreshDynamicTranslationsTable();
+    }
+  }
+
+  private void showNextDynamicTranslationsPage() {
+    int totalPages =
+        getPaginationPageCount(getFilteredDynamicTranslationKeys().size());
+
+    if (dynamicTranslationsPageIndex + 1 < totalPages) {
+      dynamicTranslationsPageIndex++;
+      refreshDynamicTranslationsTable();
+    }
   }
 
   public void refresh() {
@@ -353,9 +426,20 @@ public final class TranslationPanel extends Composite {
     addHeader();
 
     List<String> filteredTranslationKeys = getFilteredStaticTranslationKeys();
+    int totalEntryCount = filteredTranslationKeys.size();
+    int totalPages = getPaginationPageCount(totalEntryCount);
+
+    staticTranslationsPageIndex =
+        Math.min(staticTranslationsPageIndex, totalPages - 1);
+
+    int firstEntryIndex =
+        staticTranslationsPageIndex * TRANSLATIONS_PER_PAGE;
+    int endEntryIndex =
+        Math.min(firstEntryIndex + TRANSLATIONS_PER_PAGE, totalEntryCount);
     int tableRow = 1;
 
-    for (String translationKey : filteredTranslationKeys) {
+    for (int entryIndex = firstEntryIndex; entryIndex < endEntryIndex; entryIndex++) {
+      String translationKey = filteredTranslationKeys.get(entryIndex);
       TranslationEntry translationEntry = translationEntries.get(translationKey);
 
       if (translationEntry == null) {
@@ -367,19 +451,27 @@ public final class TranslationPanel extends Composite {
       table.setText(tableRow, 2, translationEntry.getComponentType());
       table.setText(tableRow, 3, translationEntry.getPropertyName());
       table.setText(tableRow, 4, translationEntry.getBaseText());
-      table.setWidget(tableRow,5, createTranslationTextBox(translationKey, selectedLanguage));
+      table.setWidget(tableRow, 5,createTranslationTextBox(translationKey, selectedLanguage));
 
       tableRow++;
     }
 
-    if (tableRow == 1) {
+    if (totalEntryCount == 0) {
       String emptyMessage = staticTranslationsSearchQuery.length() == 0
-              ? "No translations found."
-              : "No matching translations found.";
+          ? "No translations found."
+          : "No matching translations found.";
 
       table.setText(1, 0, emptyMessage);
       table.getFlexCellFormatter().setColSpan(1, 0, 6);
     }
+
+    staticTranslationsWorkspace.updatePagination(
+        totalEntryCount == 0 ? 0 : firstEntryIndex + 1,
+        endEntryIndex,
+        totalEntryCount,
+        staticTranslationsPageIndex + 1,
+        totalPages
+    );
   }
 
   private List<String> getFilteredStaticTranslationKeys() {
@@ -431,12 +523,26 @@ public final class TranslationPanel extends Composite {
     dynamicTranslationsTable.setText(0, 2, selectedLanguage);
     dynamicTranslationsTable.setText(0, 3, "Actions");
     dynamicTranslationsTable.getRowFormatter().setStylePrimaryName(
-            0, "ode-i18n-table-header");
+        0, "ode-i18n-table-header");
 
-    List<String> filteredDynamicTranslationKeys = getFilteredDynamicTranslationKeys();
+    List<String> filteredDynamicTranslationKeys =
+        getFilteredDynamicTranslationKeys();
+    int totalEntryCount = filteredDynamicTranslationKeys.size();
+    int totalPages = getPaginationPageCount(totalEntryCount);
+
+    dynamicTranslationsPageIndex =
+        Math.min(dynamicTranslationsPageIndex, totalPages - 1);
+
+    int firstEntryIndex =
+        dynamicTranslationsPageIndex * TRANSLATIONS_PER_PAGE;
+    int endEntryIndex =
+        Math.min(firstEntryIndex + TRANSLATIONS_PER_PAGE, totalEntryCount);
     int dynamicTranslationRow = 1;
 
-    for (final String dynamicTranslationKey : filteredDynamicTranslationKeys) {
+    for (int entryIndex = firstEntryIndex;
+        entryIndex < endEntryIndex; entryIndex++) {
+      final String dynamicTranslationKey =
+          filteredDynamicTranslationKeys.get(entryIndex);
       DynamicTranslationEntry dynamicTranslationEntry =
           dynamicTranslationEntries.get(dynamicTranslationKey);
 
@@ -453,27 +559,32 @@ public final class TranslationPanel extends Composite {
           }
       });
 
-      dynamicTranslationsTable.setText(dynamicTranslationRow, 0,
-          dynamicTranslationKey);
-      dynamicTranslationsTable.setText(dynamicTranslationRow, 1,
-          dynamicTranslationEntry.getBaseText());
+      dynamicTranslationsTable.setText(dynamicTranslationRow, 0, dynamicTranslationKey);
+      dynamicTranslationsTable.setText(
+          dynamicTranslationRow, 1, dynamicTranslationEntry.getBaseText());
       dynamicTranslationsTable.setWidget(dynamicTranslationRow, 2,
-          createTranslationTextBox(dynamicTranslationKey,selectedLanguage)
-      );
-      dynamicTranslationsTable.setWidget(dynamicTranslationRow, 3,
-          deleteDynamicTranslationButton);
+          createTranslationTextBox(dynamicTranslationKey, selectedLanguage));
+      dynamicTranslationsTable.setWidget(
+          dynamicTranslationRow, 3, deleteDynamicTranslationButton);
 
       dynamicTranslationRow++;
     }
 
-    if (dynamicTranslationRow == 1) {
+    if (totalEntryCount == 0) {
       String emptyMessage = dynamicTranslationsSearchQuery.length() == 0
-              ? "No dynamic translations found."
-              : "No matching dynamic translations found.";
+          ? "No dynamic translations found."
+          : "No matching dynamic translations found.";
 
       dynamicTranslationsTable.setText(1, 0, emptyMessage);
       dynamicTranslationsTable.getFlexCellFormatter().setColSpan(1, 0, 4);
     }
+
+    dynamicTranslationsWorkspace.updatePagination(
+        totalEntryCount == 0 ? 0 : firstEntryIndex + 1,
+        endEntryIndex,
+        totalEntryCount,
+        dynamicTranslationsPageIndex + 1,
+        totalPages);
   }
 
   private List<String> getFilteredDynamicTranslationKeys() {
@@ -525,6 +636,10 @@ public final class TranslationPanel extends Composite {
   private boolean containsSearchText(String searchableText, String normalizedSearchQuery) {
     return searchableText != null && searchableText.toLowerCase().contains(
       normalizedSearchQuery);
+  }
+
+  private int getPaginationPageCount(int totalEntryCount) {
+    return Math.max(1, (totalEntryCount + TRANSLATIONS_PER_PAGE - 1) / TRANSLATIONS_PER_PAGE);
   }
 
   /**

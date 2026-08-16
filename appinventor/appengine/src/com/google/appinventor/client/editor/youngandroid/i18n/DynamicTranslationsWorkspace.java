@@ -21,6 +21,10 @@ import com.google.gwt.user.client.ui.TextBox;
 public final class DynamicTranslationsWorkspace extends Composite {
   private final TextBox translationSearchTextBox;
   private final Button searchButton;
+  private final Label paginationSummaryLabel;
+  private final Button previousPageButton;
+  private final Label pageNumberLabel;
+  private final Button nextPageButton;
 
   public DynamicTranslationsWorkspace(TextBox dynamicKeyTextBox,TextBox dynamicBaseTextBox,
      TextBox dynamicPlaceholdersTextBox, Button addDynamicButton, FlexTable dynamicTranslationsTable) {
@@ -60,6 +64,31 @@ public final class DynamicTranslationsWorkspace extends Composite {
     translationSearchControls.add(translationSearchTextBox);
     translationSearchControls.add(searchButton);
 
+    FlowPanel paginationControls = new FlowPanel();
+    paginationControls.setStylePrimaryName("ode-i18n-pagination");
+
+    paginationSummaryLabel = new Label();
+    paginationSummaryLabel.setStylePrimaryName("ode-i18n-pagination-summary");
+
+    FlowPanel paginationNavigation = new FlowPanel();
+    paginationNavigation.setStylePrimaryName("ode-i18n-pagination-navigation");
+
+    previousPageButton = new Button("Previous");
+    previousPageButton.setStylePrimaryName("ode-i18n-pagination-button");
+
+    pageNumberLabel = new Label();
+    pageNumberLabel.setStylePrimaryName("ode-i18n-pagination-page-number");
+
+    nextPageButton = new Button("Next");
+    nextPageButton.setStylePrimaryName("ode-i18n-pagination-button");
+
+    paginationNavigation.add(previousPageButton);
+    paginationNavigation.add(pageNumberLabel);
+    paginationNavigation.add(nextPageButton);
+
+    paginationControls.add(paginationSummaryLabel);
+    paginationControls.add(paginationNavigation);
+
     dynamicTranslationsTable.setStylePrimaryName("ode-i18n-dynamic-table");
     dynamicTranslationsTable.setWidth("100%");
 
@@ -68,6 +97,7 @@ public final class DynamicTranslationsWorkspace extends Composite {
     workspace.add(dynamicTranslationForm);
     workspace.add(translationSearchControls);
     workspace.add(dynamicTranslationsTable);
+    workspace.add(paginationControls);
 
     initWidget(workspace);
   }
@@ -83,6 +113,24 @@ public final class DynamicTranslationsWorkspace extends Composite {
   public String getSearchQuery() {
     String searchQuery = translationSearchTextBox.getValue();
     return searchQuery == null ? "" : searchQuery.trim();
+  }
+
+  public void addPreviousPageClickHandler(ClickHandler clickHandler) {
+    previousPageButton.addClickHandler(clickHandler);
+  }
+
+  public void addNextPageClickHandler(ClickHandler clickHandler) {
+    nextPageButton.addClickHandler(clickHandler);
+  }
+
+  public void updatePagination(int firstVisibleEntry, int lastVisibleEntry,
+      int totalEntryCount, int currentPage, int totalPages) {
+    paginationSummaryLabel.setText(
+        "Showing " + firstVisibleEntry + " to " + lastVisibleEntry
+            + " of " + totalEntryCount + " entries");
+    pageNumberLabel.setText("Page " + currentPage + " of " + totalPages);
+    previousPageButton.setEnabled(currentPage > 1);
+    nextPageButton.setEnabled(currentPage < totalPages);
   }
 
   private FlowPanel createLabeledField(String labelText, TextBox textBox) {
