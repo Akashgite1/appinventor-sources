@@ -28,38 +28,30 @@ public final class TranslationLanguageSidebar extends Composite {
     Label languageTitle = new Label("Languages");
     languageTitle.setStylePrimaryName("ode-i18n-sidebar-title");
 
-    Label languageDescription = new Label(
-        "Choose the language you are currently translating.");
-    languageDescription.setStylePrimaryName(
-        "ode-i18n-sidebar-description");
+    Label languageDescription = new Label("Choose the language you are currently translating.");
+    languageDescription.setStylePrimaryName("ode-i18n-sidebar-description");
 
     FlowPanel currentLanguageSection = new FlowPanel();
-    currentLanguageSection.setStylePrimaryName(
-        "ode-i18n-sidebar-section");
+    currentLanguageSection.setStylePrimaryName("ode-i18n-sidebar-section");
 
     Label currentLanguageLabel = new Label("Current language");
     currentLanguageLabel.setStylePrimaryName("ode-i18n-field-label");
 
-    languageListBox.setStylePrimaryName(
-        "ode-i18n-language-selector");
-    deleteLanguageButton.addStyleName(
-        "ode-i18n-delete-language-button");
+    languageListBox.setStylePrimaryName("ode-i18n-language-selector");
+    deleteLanguageButton.addStyleName("ode-i18n-delete-language-button");
 
     currentLanguageSection.add(currentLanguageLabel);
     currentLanguageSection.add(languageListBox);
     currentLanguageSection.add(deleteLanguageButton);
 
     FlowPanel addLanguageSection = new FlowPanel();
-    addLanguageSection.setStylePrimaryName(
-        "ode-i18n-sidebar-section");
+    addLanguageSection.setStylePrimaryName("ode-i18n-sidebar-section");
 
     Label addLanguageLabel = new Label("Add language code");
     addLanguageLabel.setStylePrimaryName("ode-i18n-field-label");
 
-    languageTextBox.setStylePrimaryName(
-        "ode-i18n-add-language-input");
-    addLanguageButton.addStyleName(
-        "ode-i18n-add-language-button");
+    languageTextBox.setStylePrimaryName("ode-i18n-add-language-input");
+    addLanguageButton.addStyleName("ode-i18n-add-language-button");
 
     addLanguageSection.add(addLanguageLabel);
     addLanguageSection.add(languageTextBox);
@@ -76,10 +68,8 @@ public final class TranslationLanguageSidebar extends Composite {
     Label exportTitle = new Label("Export");
     exportTitle.setStylePrimaryName("ode-i18n-sidebar-title");
 
-    Label exportDescription = new Label(
-        "Export all translations as JSON.");
-    exportDescription.setStylePrimaryName(
-        "ode-i18n-sidebar-description");
+    Label exportDescription = new Label("Export all translations as JSON.");
+    exportDescription.setStylePrimaryName("ode-i18n-sidebar-description");
 
     exportButton.addStyleName("ode-i18n-export-button");
 

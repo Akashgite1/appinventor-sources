@@ -27,16 +27,13 @@ public final class TranslationWorkspaceToolbar extends Composite {
     workspaceSwitchControls.setStylePrimaryName("ode-i18n-workspace-switch");
 
     staticTranslationsButton = new Button("Static translations");
-    staticTranslationsButton.addStyleName(
-        "ode-i18n-workspace-switch-button");
+    staticTranslationsButton.addStyleName("ode-i18n-workspace-switch-button");
 
     dynamicTranslationsButton = new Button("Dynamic translations");
-    dynamicTranslationsButton.addStyleName(
-        "ode-i18n-workspace-switch-button");
+    dynamicTranslationsButton.addStyleName("ode-i18n-workspace-switch-button");
 
     selectedLanguageLabel = new Label();
-    selectedLanguageLabel.setStylePrimaryName(
-        "ode-i18n-selected-language");
+    selectedLanguageLabel.setStylePrimaryName("ode-i18n-selected-language");
 
     workspaceSwitchControls.add(staticTranslationsButton);
     workspaceSwitchControls.add(dynamicTranslationsButton);
@@ -47,19 +44,16 @@ public final class TranslationWorkspaceToolbar extends Composite {
     initWidget(toolbar);
   }
 
-  public void addStaticTranslationsClickHandler(
-      ClickHandler clickHandler) {
+  public void addStaticTranslationsClickHandler(ClickHandler clickHandler) {
     staticTranslationsButton.addClickHandler(clickHandler);
   }
 
-  public void addDynamicTranslationsClickHandler(
-      ClickHandler clickHandler) {
+  public void addDynamicTranslationsClickHandler(ClickHandler clickHandler) {
     dynamicTranslationsButton.addClickHandler(clickHandler);
   }
 
   public void setSelectedLanguage(String languageCode) {
-    selectedLanguageLabel.setText(
-        languageCode == null ? "" : languageCode);
+    selectedLanguageLabel.setText(languageCode == null ? "" : languageCode);
   }
 
   public void setStaticTranslationsActive(boolean active) {
@@ -72,11 +66,9 @@ public final class TranslationWorkspaceToolbar extends Composite {
 
   private void setWorkspaceButtonActive(Button button, boolean active) {
     if (active) {
-      button.addStyleName(
-          "ode-i18n-workspace-switch-button-active");
+      button.addStyleName("ode-i18n-workspace-switch-button-active");
     } else {
-      button.removeStyleName(
-          "ode-i18n-workspace-switch-button-active");
+      button.removeStyleName("ode-i18n-workspace-switch-button-active");
     }
   }
 }
