@@ -11,6 +11,8 @@ import com.google.gwt.event.dom.client.ChangeEvent;
 import com.google.gwt.event.dom.client.ChangeHandler;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
+import com.google.gwt.event.dom.client.KeyUpEvent;
+import com.google.gwt.event.dom.client.KeyUpHandler;
 import com.google.gwt.json.client.JSONArray;
 import com.google.gwt.json.client.JSONObject;
 import com.google.gwt.json.client.JSONParser;
@@ -37,10 +39,20 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 public final class TranslationPanel extends Composite {
-  private static final String DEFAULT_LANGUAGE = "hi";
 
+  /**
+   * Identifies the translation workspace currently displayed.
+   */
+  private enum TranslationWorkspaceMode {
+    STATIC_TRANSLATIONS,
+    DYNAMIC_TRANSLATIONS
+  }
+
+  private static final String DEFAULT_LANGUAGE = "hi";
+  private static final int TRANSLATIONS_PER_PAGE = 20;
   private final YaProjectEditor projectEditor;
   private final FlexTable table;
+  private final FlexTable dynamicTranslationsTable;
   private final Map<String, Map<String, String>> translationValues;
   private final Map<String, TranslationEntry> translationEntries;
   private final Map<String, DynamicTranslationEntry> dynamicTranslationEntries;
@@ -53,6 +65,15 @@ public final class TranslationPanel extends Composite {
   private String selectedLanguage;
   private static final String LOCATOR_SEPARATOR = "\u0000";
   private final Map<String, String> locatorToTranslationKey;
+  private final List<String> staticTranslationEntryOrder;
+  private final TranslationWorkspaceToolbar translationWorkspaceToolbar;
+  private final StaticTranslationsWorkspace staticTranslationsWorkspace;
+  private final DynamicTranslationsWorkspace dynamicTranslationsWorkspace;
+  private TranslationWorkspaceMode activeTranslationWorkspaceMode;
+  private String staticTranslationsSearchQuery;
+  private String dynamicTranslationsSearchQuery;
+  private int staticTranslationsPageIndex;
+  private int dynamicTranslationsPageIndex;
 
   private boolean savedTranslationsLoaded;
 
@@ -61,6 +82,7 @@ public final class TranslationPanel extends Composite {
   public TranslationPanel(YaProjectEditor projectEditor) {
     this.projectEditor = projectEditor;
     this.table = new FlexTable();
+    this.dynamicTranslationsTable = new FlexTable();
     this.translationValues = new HashMap<String, Map<String, String>>();
     this.translationEntries = new HashMap<String, TranslationEntry>();
     this.dynamicTranslationEntries = new HashMap<String, DynamicTranslationEntry>();
@@ -74,21 +96,32 @@ public final class TranslationPanel extends Composite {
     this.dynamicBaseTextBox = new TextBox();
     this.dynamicPlaceholdersTextBox = new TextBox();
     this.locatorToTranslationKey = new HashMap<String, String>();
+    this.staticTranslationEntryOrder = new ArrayList<String>();
+    this.staticTranslationsSearchQuery = "";
+    this.dynamicTranslationsSearchQuery = "";
+    this.staticTranslationsPageIndex = 0;
+    this.dynamicTranslationsPageIndex = 0;
+    this.activeTranslationWorkspaceMode = TranslationWorkspaceMode.STATIC_TRANSLATIONS;
 
     FlowPanel root = new FlowPanel();
     root.setStylePrimaryName("ode-i18n-panel");
     root.setWidth("100%");
     root.setHeight("100%");
 
+    FlowPanel translationPageHeader = new FlowPanel();
+    translationPageHeader.setStylePrimaryName("ode-i18n-page-header");
+
     Label title = new Label("Translations");
     title.setStylePrimaryName("ode-i18n-title");
 
     Label description = new Label(
-        "This table lists translatable Designer properties and assigns safe internal "
-            + "translation keys. Translation changes are saved automatically.");
+        "Translate your app's text into multiple languages. "
+            + "Changes are saved automatically.");
+    description.setStylePrimaryName(
+        "ode-i18n-page-description");
 
-    table.setStylePrimaryName("ode-i18n-table");
-    table.setWidth("100%");
+    translationPageHeader.add(title);
+    translationPageHeader.add(description);
 
     Button exportButton = new Button("Export JSON");
     exportButton.addClickHandler(new ClickHandler() {
@@ -99,16 +132,6 @@ public final class TranslationPanel extends Composite {
           exportJson());
       }
     });
-
-    root.add(title);
-    root.add(description);
-
-    Label dynamicLabel = new Label("Dynamic translations:");
-    dynamicLabel.setStylePrimaryName("ode-i18n-subtitle");
-
-    Label dynamicHelpLabel = new Label(
-        "Create user-defined message keys for runtime lookup. "
-            + "Example key: welcome_message, base text: Hello {name}, placeholders: name");
 
     dynamicKeyTextBox.setWidth("180px");
     dynamicKeyTextBox.getElement().setPropertyString("placeholder", "welcome_message");
@@ -127,19 +150,6 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    root.add(dynamicLabel);
-    root.add(dynamicHelpLabel);
-    root.add(new Label("Key:"));
-    root.add(dynamicKeyTextBox);
-    root.add(new Label("Base text:"));
-    root.add(dynamicBaseTextBox);
-    root.add(new Label("Placeholders:"));
-    root.add(dynamicPlaceholdersTextBox);
-    root.add(addDynamicButton);
-
-    root.add(table);
-
-    Label languageLabel = new Label("Language code, e.g. hi, es, pt-BR:");
     languageTextBox.setWidth("80px");
 
     Button addLanguageButton = new Button("Add Language");
@@ -153,7 +163,6 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    Label languagesLabel = new Label("Languages:");
     languageListBox.setVisibleItemCount(1);
     languageListBox.addChangeHandler(new ChangeHandler() {
       @Override
@@ -174,118 +183,484 @@ public final class TranslationPanel extends Composite {
       }
     });
 
-    root.add(languageLabel);
-    root.add(languageTextBox);
-    root.add(addLanguageButton);
-    root.add(exportButton);
-    root.add(languagesLabel);
-    root.add(languageListBox);
-    root.add(deleteLanguageButton);
+    translationWorkspaceToolbar = new TranslationWorkspaceToolbar();
+
+    translationWorkspaceToolbar.addStaticTranslationsClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showStaticTranslationsWorkspace();
+        }
+    });
+
+    translationWorkspaceToolbar.addDynamicTranslationsClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showDynamicTranslationsWorkspace();
+        }
+    });
+
+    TranslationLanguageSidebar translationLanguageSidebar =
+        new TranslationLanguageSidebar(
+            languageListBox,
+            languageTextBox,
+            addLanguageButton,
+            deleteLanguageButton,
+            exportButton);
+
+    staticTranslationsWorkspace = new StaticTranslationsWorkspace(table);
+
+    staticTranslationsWorkspace.addSearchKeyUpHandler(
+      new KeyUpHandler() {
+        @Override
+        public void onKeyUp(KeyUpEvent event) {
+          applyStaticTranslationsSearch();
+        }
+    });
+
+    staticTranslationsWorkspace.addSearchClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          applyStaticTranslationsSearch();
+        }
+    });
+
+    staticTranslationsWorkspace.addPreviousPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showPreviousStaticTranslationsPage();
+        }
+    });
+
+    staticTranslationsWorkspace.addNextPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showNextStaticTranslationsPage();
+        }
+    });
+
+    dynamicTranslationsWorkspace = new DynamicTranslationsWorkspace(
+            dynamicKeyTextBox,
+            dynamicBaseTextBox,
+            dynamicPlaceholdersTextBox,
+            addDynamicButton,
+            dynamicTranslationsTable);
+
+    dynamicTranslationsWorkspace.addSearchKeyUpHandler(
+      new KeyUpHandler() {
+        @Override
+        public void onKeyUp(KeyUpEvent event) {
+          applyDynamicTranslationsSearch();
+        }
+    });
+
+    dynamicTranslationsWorkspace.addSearchClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          applyDynamicTranslationsSearch();
+        }
+    });
+
+    dynamicTranslationsWorkspace.addPreviousPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showPreviousDynamicTranslationsPage();
+        }
+    });
+
+    dynamicTranslationsWorkspace.addNextPageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showNextDynamicTranslationsPage();
+        }
+    });
+
+    FlowPanel activeWorkspaceContainer = new FlowPanel();
+    activeWorkspaceContainer.setStylePrimaryName("ode-i18n-active-workspace");
+    activeWorkspaceContainer.add(staticTranslationsWorkspace);
+    activeWorkspaceContainer.add(dynamicTranslationsWorkspace);
+
+    FlowPanel workspaceLayout = new FlowPanel();
+    workspaceLayout.setStylePrimaryName("ode-i18n-workspace-layout");
+    workspaceLayout.add(translationLanguageSidebar);
+    workspaceLayout.add(activeWorkspaceContainer);
+
+    root.add(translationPageHeader);
+    root.add(translationWorkspaceToolbar);
+    root.add(workspaceLayout);
+
+    updateVisibleTranslationWorkspace();
 
     initWidget(root);
   }
 
+  /**
+   * Displays translations generated from Designer properties.
+   */
+  private void showStaticTranslationsWorkspace() {
+    activeTranslationWorkspaceMode = TranslationWorkspaceMode.STATIC_TRANSLATIONS;
+    updateVisibleTranslationWorkspace();
+  }
 
+  /**
+   * Displays translations created for runtime lookup.
+   */
+  private void showDynamicTranslationsWorkspace() {
+    activeTranslationWorkspaceMode = TranslationWorkspaceMode.DYNAMIC_TRANSLATIONS;
+    updateVisibleTranslationWorkspace();
+  }
+
+  /**
+   * Synchronizes workspace visibility and toolbar presentation.
+   */
+  private void updateVisibleTranslationWorkspace() {
+    boolean staticTranslationsVisible = activeTranslationWorkspaceMode
+            == TranslationWorkspaceMode.STATIC_TRANSLATIONS;
+
+    staticTranslationsWorkspace.setVisible(staticTranslationsVisible);
+    dynamicTranslationsWorkspace.setVisible(!staticTranslationsVisible);
+
+    translationWorkspaceToolbar.setStaticTranslationsActive(staticTranslationsVisible);
+    translationWorkspaceToolbar.setDynamicTranslationsActive(!staticTranslationsVisible);
+    translationWorkspaceToolbar.setSelectedLanguage(selectedLanguage);
+  }
+
+  private void applyStaticTranslationsSearch() {
+    staticTranslationsSearchQuery = staticTranslationsWorkspace.getSearchQuery();
+    staticTranslationsPageIndex = 0;
+    refreshStaticTranslationsTable();
+  }
+
+  private void applyDynamicTranslationsSearch() {
+    dynamicTranslationsSearchQuery = dynamicTranslationsWorkspace.getSearchQuery();
+    dynamicTranslationsPageIndex = 0;
+    refreshDynamicTranslationsTable();
+  }
+
+  private void showPreviousStaticTranslationsPage() {
+    if (staticTranslationsPageIndex > 0) {
+      staticTranslationsPageIndex--;
+      refreshStaticTranslationsTable();
+    }
+  }
+
+  private void showNextStaticTranslationsPage() {
+    int totalPages =
+        getPaginationPageCount(getFilteredStaticTranslationKeys().size());
+
+    if (staticTranslationsPageIndex + 1 < totalPages) {
+      staticTranslationsPageIndex++;
+      refreshStaticTranslationsTable();
+    }
+  }
+
+  private void showPreviousDynamicTranslationsPage() {
+    if (dynamicTranslationsPageIndex > 0) {
+      dynamicTranslationsPageIndex--;
+      refreshDynamicTranslationsTable();
+    }
+  }
+
+  private void showNextDynamicTranslationsPage() {
+    int totalPages =
+        getPaginationPageCount(getFilteredDynamicTranslationKeys().size());
+
+    if (dynamicTranslationsPageIndex + 1 < totalPages) {
+      dynamicTranslationsPageIndex++;
+      refreshDynamicTranslationsTable();
+    }
+  }
 
   public void refresh() {
     loadSavedTranslations();
     ensureSelectedLanguage();
     refreshLanguageListBox();
 
-    clearTable();
     translationEntries.clear();
+    staticTranslationEntryOrder.clear();
 
-    addHeader();
-
-    int row = 1;
     List<String> formNames = projectEditor.getFormNames();
 
     for (String formName : formNames) {
       List<String> componentNames = projectEditor.getComponentInstances(formName);
 
-      if (componentNames.isEmpty()) {
-        table.setText(row, 0, formName);
-        table.setText(row, 1, "");
-        table.setText(row, 2, "");
-        table.setText(row, 3, "");
-        table.setText(row, 4, "");
-        table.setText(row, 5, "No components found");
-        row++;
-        continue;
-      }
-
       for (String componentName : componentNames) {
         String componentType = projectEditor.getComponentType(formName, componentName);
 
-        for (String propertyName : projectEditor.getComponentPropertyNames(formName,
-            componentName)) {
+        for (String propertyName : projectEditor.getComponentPropertyNames(formName, componentName)) {
           if (!isTranslatableProperty(propertyName)) {
             continue;
           }
 
-          String propertyValue = projectEditor.getComponentPropertyValue(formName,
-              componentName, propertyName);
-          String generatedKey = getOrCreateTranslationKey(formName,
-              componentName, propertyName);
-          translationEntries.put(generatedKey, new TranslationEntry(generatedKey, formName,
-              componentName, componentType, propertyName, propertyValue));
+          String propertyValue = projectEditor.getComponentPropertyValue(formName, componentName,propertyName);
+          String generatedKey = getOrCreateTranslationKey(formName, componentName, propertyName);
+          translationEntries.put(generatedKey,
+              new TranslationEntry(
+                  generatedKey,
+                  formName,
+                  componentName,
+                  componentType,
+                  propertyName,
+                  propertyValue
+          ));
 
-          table.setText(row, 0, formName);
-          table.setText(row, 1, componentName);
-          table.setText(row, 2, componentType);
-          table.setText(row, 3, propertyName);
-          table.setText(row, 4, generatedKey);
-          table.setText(row, 5, propertyValue);
-          table.setWidget(row, 6, createTranslationTextBox(generatedKey, selectedLanguage));
-          table.setText(row, 7, "");
-          row++;
+          staticTranslationEntryOrder.add(generatedKey);
         }
       }
     }
-    addDynamicRows(row);
+
+    refreshStaticTranslationsTable();
+    refreshDynamicTranslationsTable();
+    updateVisibleTranslationWorkspace();
   }
 
-  private int addDynamicRows(int row) {
-    ArrayList<String> keys = new ArrayList<String>(dynamicTranslationEntries.keySet());
-    Collections.sort(keys);
+  private void refreshStaticTranslationsTable() {
+    clearTable();
+    addHeader();
 
-    for (final String key : keys) {
-      DynamicTranslationEntry entry = dynamicTranslationEntries.get(key);
-      if (entry == null) {
+    List<String> filteredTranslationKeys = getFilteredStaticTranslationKeys();
+    int totalEntryCount = filteredTranslationKeys.size();
+    int totalPages = getPaginationPageCount(totalEntryCount);
+
+    staticTranslationsPageIndex =
+        Math.min(staticTranslationsPageIndex, totalPages - 1);
+
+    int firstEntryIndex =
+        staticTranslationsPageIndex * TRANSLATIONS_PER_PAGE;
+    int endEntryIndex =
+        Math.min(firstEntryIndex + TRANSLATIONS_PER_PAGE, totalEntryCount);
+    int tableRow = 1;
+
+    for (int entryIndex = firstEntryIndex; entryIndex < endEntryIndex; entryIndex++) {
+      String translationKey = filteredTranslationKeys.get(entryIndex);
+      TranslationEntry translationEntry = translationEntries.get(translationKey);
+
+      if (translationEntry == null) {
         continue;
       }
 
-      Button deleteButton = new Button("Delete");
-      deleteButton.addClickHandler(new ClickHandler() {
-        @Override
-        public void onClick(ClickEvent event) {
-          deleteDynamicTranslationEntry(key);
-        }
-      });
+      table.setText(tableRow, 0, translationEntry.getScreenName());
+      table.setText(tableRow, 1, translationEntry.getComponentName());
+      table.setText(tableRow, 2, translationEntry.getComponentType());
+      table.setText(tableRow, 3, translationEntry.getPropertyName());
+      table.setText(tableRow, 4, translationEntry.getBaseText());
+      table.setWidget(tableRow, 5,createTranslationTextBox(translationKey, selectedLanguage));
 
-      table.setText(row, 0, "Dynamic");
-      table.setText(row, 1, "");
-      table.setText(row, 2, "Dynamic");
-      table.setText(row, 3, "Message");
-      table.setText(row, 4, key);
-      table.setText(row, 5, entry.getBaseText());
-      table.setWidget(row, 6, createTranslationTextBox(key, selectedLanguage));
-      table.setWidget(row, 7, deleteButton);
-      row++;
+      tableRow++;
     }
 
-    return row;
+    if (totalEntryCount == 0) {
+      String emptyMessage = staticTranslationsSearchQuery.length() == 0
+          ? "No translations found."
+          : "No matching translations found.";
+
+      table.setText(1, 0, emptyMessage);
+      table.getFlexCellFormatter().setColSpan(1, 0, 6);
+    }
+
+    staticTranslationsWorkspace.updatePagination(
+        totalEntryCount == 0 ? 0 : firstEntryIndex + 1,
+        endEntryIndex,
+        totalEntryCount,
+        staticTranslationsPageIndex + 1,
+        totalPages
+    );
   }
 
+  private List<String> getFilteredStaticTranslationKeys() {
+    List<String> filteredTranslationKeys = new ArrayList<String>();
+    String normalizedSearchQuery = staticTranslationsSearchQuery.toLowerCase();
+
+    for (String translationKey : staticTranslationEntryOrder) {
+      TranslationEntry translationEntry = translationEntries.get(translationKey);
+
+      if (translationEntry == null) {
+        continue;
+      }
+
+      if (normalizedSearchQuery.length() == 0
+          || matchesStaticTranslationSearch(
+              translationKey,
+              translationEntry,
+              normalizedSearchQuery)) {
+        filteredTranslationKeys.add(translationKey);
+      }
+    }
+
+    return filteredTranslationKeys;
+  }
+
+  private boolean matchesStaticTranslationSearch(String translationKey,
+    TranslationEntry translationEntry, String normalizedSearchQuery) {
+    return containsSearchText(translationEntry.getScreenName(),normalizedSearchQuery)
+        || containsSearchText(translationEntry.getComponentName(),
+            normalizedSearchQuery)
+        || containsSearchText(translationEntry.getComponentType(),
+            normalizedSearchQuery)
+        || containsSearchText(translationEntry.getPropertyName(),
+            normalizedSearchQuery)
+        || containsSearchText(translationEntry.getBaseText(),
+            normalizedSearchQuery)
+        || containsSearchText(getTranslationValue(translationKey, selectedLanguage),
+            normalizedSearchQuery);
+  }
+
+  /**
+   * Rebuilds the table containing runtime translation entries.
+   */
+  private void refreshDynamicTranslationsTable() {
+    clearDynamicTranslationsTable();
+
+    dynamicTranslationsTable.setText(0, 0, "Key");
+    dynamicTranslationsTable.setText(0, 1, "Base Text");
+    dynamicTranslationsTable.setText(0, 2, selectedLanguage);
+    dynamicTranslationsTable.setText(0, 3, "Actions");
+    dynamicTranslationsTable.getRowFormatter().setStylePrimaryName(
+        0, "ode-i18n-table-header");
+
+    List<String> filteredDynamicTranslationKeys =
+        getFilteredDynamicTranslationKeys();
+    int totalEntryCount = filteredDynamicTranslationKeys.size();
+    int totalPages = getPaginationPageCount(totalEntryCount);
+
+    dynamicTranslationsPageIndex =
+        Math.min(dynamicTranslationsPageIndex, totalPages - 1);
+
+    int firstEntryIndex =
+        dynamicTranslationsPageIndex * TRANSLATIONS_PER_PAGE;
+    int endEntryIndex =
+        Math.min(firstEntryIndex + TRANSLATIONS_PER_PAGE, totalEntryCount);
+    int dynamicTranslationRow = 1;
+
+    for (int entryIndex = firstEntryIndex;
+        entryIndex < endEntryIndex; entryIndex++) {
+      final String dynamicTranslationKey =
+          filteredDynamicTranslationKeys.get(entryIndex);
+      DynamicTranslationEntry dynamicTranslationEntry =
+          dynamicTranslationEntries.get(dynamicTranslationKey);
+
+      if (dynamicTranslationEntry == null) {
+        continue;
+      }
+
+      Button deleteDynamicTranslationButton = new Button("Delete");
+      deleteDynamicTranslationButton.addClickHandler(
+        new ClickHandler() {
+          @Override
+          public void onClick(ClickEvent event) {
+            deleteDynamicTranslationEntry(dynamicTranslationKey);
+          }
+      });
+
+      dynamicTranslationsTable.setText(dynamicTranslationRow, 0, dynamicTranslationKey);
+      dynamicTranslationsTable.setText(
+          dynamicTranslationRow, 1, dynamicTranslationEntry.getBaseText());
+      dynamicTranslationsTable.setWidget(dynamicTranslationRow, 2,
+          createTranslationTextBox(dynamicTranslationKey, selectedLanguage));
+      dynamicTranslationsTable.setWidget(
+          dynamicTranslationRow, 3, deleteDynamicTranslationButton);
+
+      dynamicTranslationRow++;
+    }
+
+    if (totalEntryCount == 0) {
+      String emptyMessage = dynamicTranslationsSearchQuery.length() == 0
+          ? "No dynamic translations found."
+          : "No matching dynamic translations found.";
+
+      dynamicTranslationsTable.setText(1, 0, emptyMessage);
+      dynamicTranslationsTable.getFlexCellFormatter().setColSpan(1, 0, 4);
+    }
+
+    dynamicTranslationsWorkspace.updatePagination(
+        totalEntryCount == 0 ? 0 : firstEntryIndex + 1,
+        endEntryIndex,
+        totalEntryCount,
+        dynamicTranslationsPageIndex + 1,
+        totalPages);
+  }
+
+  private List<String> getFilteredDynamicTranslationKeys() {
+    ArrayList<String> dynamicTranslationKeys = new ArrayList<String>(
+            dynamicTranslationEntries.keySet());
+    Collections.sort(dynamicTranslationKeys);
+
+    List<String> filteredDynamicTranslationKeys = new ArrayList<String>();
+    String normalizedSearchQuery = dynamicTranslationsSearchQuery.toLowerCase();
+
+    for (String dynamicTranslationKey : dynamicTranslationKeys) {
+      DynamicTranslationEntry dynamicTranslationEntry = dynamicTranslationEntries.get(
+              dynamicTranslationKey);
+
+      if (dynamicTranslationEntry == null) {
+        continue;
+      }
+
+      if (normalizedSearchQuery.length() == 0 || matchesDynamicTranslationSearch(
+        dynamicTranslationKey, dynamicTranslationEntry, normalizedSearchQuery)) {
+          filteredDynamicTranslationKeys.add(dynamicTranslationKey);
+      }
+    }
+
+    return filteredDynamicTranslationKeys;
+  }
+
+  private boolean matchesDynamicTranslationSearch(
+    String dynamicTranslationKey,
+    DynamicTranslationEntry dynamicTranslationEntry,
+    String normalizedSearchQuery) {
+    if (containsSearchText(dynamicTranslationKey, normalizedSearchQuery)
+        || containsSearchText(
+            dynamicTranslationEntry.getBaseText(), normalizedSearchQuery)
+        || containsSearchText(getTranslationValue(dynamicTranslationKey, selectedLanguage),
+            normalizedSearchQuery)) {
+      return true;
+    }
+
+    for (String placeholder : dynamicTranslationEntry.getPlaceholders()) {
+      if (containsSearchText(placeholder, normalizedSearchQuery)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private boolean containsSearchText(String searchableText, String normalizedSearchQuery) {
+    return searchableText != null && searchableText.toLowerCase().contains(
+      normalizedSearchQuery);
+  }
+
+  private int getPaginationPageCount(int totalEntryCount) {
+    return Math.max(1, (totalEntryCount + TRANSLATIONS_PER_PAGE - 1) / TRANSLATIONS_PER_PAGE);
+  }
+
+  /**
+   * Removes all rendered rows before rebuilding the dynamic table.
+   */
+  private void clearDynamicTranslationsTable() {
+    while (dynamicTranslationsTable.getRowCount() > 0) {
+      dynamicTranslationsTable.removeRow(0);
+    }
+  }
+
+  /**
+   * Adds the column headings for Designer-property translations.
+   */
   private void addHeader() {
     table.setText(0, 0, "Screen");
     table.setText(0, 1, "Component");
     table.setText(0, 2, "Type");
     table.setText(0, 3, "Property");
-    table.setText(0, 4, "Internal Key");
-    table.setText(0, 5, "Base Text");
-    table.setText(0, 6, selectedLanguage);
-    table.setText(0, 7, "Actions");
+    table.setText(0, 4, "Base Text");
+    table.setText(0, 5, selectedLanguage);
     table.getRowFormatter().setStylePrimaryName(0, "ode-i18n-table-header");
   }
 
