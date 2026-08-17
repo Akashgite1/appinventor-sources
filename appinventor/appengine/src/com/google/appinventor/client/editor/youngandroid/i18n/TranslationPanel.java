@@ -25,7 +25,6 @@ import com.google.gwt.user.client.ui.DialogBox;
 import com.google.gwt.user.client.ui.FlexTable;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.Label;
-import com.google.gwt.user.client.ui.ListBox;
 import com.google.gwt.user.client.ui.TextArea;
 import com.google.gwt.user.client.ui.TextBox;
 import com.google.gwt.user.client.ui.VerticalPanel;
@@ -48,7 +47,6 @@ public final class TranslationPanel extends Composite {
     DYNAMIC_TRANSLATIONS
   }
 
-  private static final String DEFAULT_LANGUAGE = "hi";
   private static final int TRANSLATIONS_PER_PAGE = 20;
   private final YaProjectEditor projectEditor;
   private final FlexTable table;
@@ -57,8 +55,7 @@ public final class TranslationPanel extends Composite {
   private final Map<String, TranslationEntry> translationEntries;
   private final Map<String, DynamicTranslationEntry> dynamicTranslationEntries;
   private final List<String> languages;
-  private final TextBox languageTextBox;
-  private final ListBox languageListBox;
+  private String baseLanguage;
   private final TextBox dynamicKeyTextBox;
   private final TextBox dynamicBaseTextBox;
   private final TextBox dynamicPlaceholdersTextBox;
@@ -70,6 +67,10 @@ public final class TranslationPanel extends Composite {
   private final StaticTranslationsWorkspace staticTranslationsWorkspace;
   private final DynamicTranslationsWorkspace dynamicTranslationsWorkspace;
   private TranslationWorkspaceMode activeTranslationWorkspaceMode;
+  private final TranslationSetupPanel translationSetupPanel;
+  private final TranslationLanguageSidebar translationLanguageSidebar;
+  private final TranslationWorkspaceEmptyState translationWorkspaceEmptyState;
+  private final FlowPanel translationWorkspaceContent;
   private String staticTranslationsSearchQuery;
   private String dynamicTranslationsSearchQuery;
   private int staticTranslationsPageIndex;
@@ -88,10 +89,8 @@ public final class TranslationPanel extends Composite {
     this.dynamicTranslationEntries = new HashMap<String, DynamicTranslationEntry>();
     this.savedTranslationsLoaded = false;
     this.languages = new ArrayList<String>();
-    this.languages.add(DEFAULT_LANGUAGE);
-    this.selectedLanguage = DEFAULT_LANGUAGE;
-    this.languageTextBox = new TextBox();
-    this.languageListBox = new ListBox();
+    this.baseLanguage = null;
+    this.selectedLanguage = null;
     this.dynamicKeyTextBox = new TextBox();
     this.dynamicBaseTextBox = new TextBox();
     this.dynamicPlaceholdersTextBox = new TextBox();
@@ -117,21 +116,10 @@ public final class TranslationPanel extends Composite {
     Label description = new Label(
         "Translate your app's text into multiple languages. "
             + "Changes are saved automatically.");
-    description.setStylePrimaryName(
-        "ode-i18n-page-description");
+    description.setStylePrimaryName("ode-i18n-page-description");
 
     translationPageHeader.add(title);
     translationPageHeader.add(description);
-
-    Button exportButton = new Button("Export JSON");
-    exportButton.addClickHandler(new ClickHandler() {
-      @Override
-      public void onClick(ClickEvent event) {
-      showJsonDialog("Export Translation JSON",
-          "Copy or inspect the current i18n JSON below.",
-          exportJson());
-      }
-    });
 
     dynamicKeyTextBox.setWidth("180px");
     dynamicKeyTextBox.getElement().setPropertyString("placeholder", "welcome_message");
@@ -147,39 +135,6 @@ public final class TranslationPanel extends Composite {
       @Override
       public void onClick(ClickEvent event) {
         addDynamicTranslationEntry();
-      }
-    });
-
-    languageTextBox.setWidth("80px");
-
-    Button addLanguageButton = new Button("Add Language");
-    addLanguageButton.addClickHandler(new ClickHandler() {
-      @Override
-      public void onClick(ClickEvent event) {
-        addLanguage(languageTextBox.getValue(), true);
-        languageTextBox.setValue("");
-        refresh();
-        updateTranslationsSetting();
-      }
-    });
-
-    languageListBox.setVisibleItemCount(1);
-    languageListBox.addChangeHandler(new ChangeHandler() {
-      @Override
-      public void onChange(ChangeEvent event) {
-        int selectedIndex = languageListBox.getSelectedIndex();
-        if (selectedIndex >= 0) {
-          selectedLanguage = languageListBox.getItemText(selectedIndex);
-          refresh();
-        }
-      }
-    });
-
-    Button deleteLanguageButton = new Button("Delete Language");
-    deleteLanguageButton.addClickHandler(new ClickHandler() {
-      @Override
-      public void onClick(ClickEvent event) {
-        deleteSelectedLanguage();
       }
     });
 
@@ -201,13 +156,58 @@ public final class TranslationPanel extends Composite {
         }
     });
 
-    TranslationLanguageSidebar translationLanguageSidebar =
-        new TranslationLanguageSidebar(
-            languageListBox,
-            languageTextBox,
-            addLanguageButton,
-            deleteLanguageButton,
-            exportButton);
+    translationSetupPanel = new TranslationSetupPanel();
+    translationSetupPanel.addContinueClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          completeTranslationSetup();
+        }
+    });
+
+    translationLanguageSidebar = new TranslationLanguageSidebar();
+
+    translationLanguageSidebar.addCurrentLanguageChangeHandler(
+      new ChangeHandler() {
+        @Override
+        public void onChange(ChangeEvent event) {
+          String language =
+              translationLanguageSidebar.getSelectedCurrentLanguage();
+
+          if (language.length() > 0
+              && !language.equals(selectedLanguage)) {
+            selectedLanguage = language;
+            refresh();
+          }
+        }
+    });
+
+    translationLanguageSidebar.addLanguageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          addSelectedTranslationLanguage();
+        }
+    });
+
+    translationLanguageSidebar.addDeleteLanguageClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          deleteSelectedLanguage();
+        }
+    });
+
+    translationLanguageSidebar.addExportClickHandler(
+      new ClickHandler() {
+        @Override
+        public void onClick(ClickEvent event) {
+          showJsonDialog(
+              "Export Translation JSON",
+              "Copy or inspect the current i18n JSON below.",
+              exportJson());
+        }
+    });
 
     staticTranslationsWorkspace = new StaticTranslationsWorkspace(table);
 
@@ -282,21 +282,29 @@ public final class TranslationPanel extends Composite {
         }
     });
 
+    translationWorkspaceEmptyState = new TranslationWorkspaceEmptyState();
+
     FlowPanel activeWorkspaceContainer = new FlowPanel();
     activeWorkspaceContainer.setStylePrimaryName("ode-i18n-active-workspace");
     activeWorkspaceContainer.add(staticTranslationsWorkspace);
     activeWorkspaceContainer.add(dynamicTranslationsWorkspace);
+    activeWorkspaceContainer.add(translationWorkspaceEmptyState);
 
     FlowPanel workspaceLayout = new FlowPanel();
     workspaceLayout.setStylePrimaryName("ode-i18n-workspace-layout");
     workspaceLayout.add(translationLanguageSidebar);
     workspaceLayout.add(activeWorkspaceContainer);
 
-    root.add(translationPageHeader);
-    root.add(translationWorkspaceToolbar);
-    root.add(workspaceLayout);
+    translationWorkspaceContent = new FlowPanel();
+    translationWorkspaceContent.setStylePrimaryName("ode-i18n-workspace-content");
+    translationWorkspaceContent.add(translationPageHeader);
+    translationWorkspaceContent.add(translationWorkspaceToolbar);
+    translationWorkspaceContent.add(workspaceLayout);
 
-    updateVisibleTranslationWorkspace();
+    root.add(translationSetupPanel);
+    root.add(translationWorkspaceContent);
+
+    updateTranslationView();
 
     initWidget(root);
   }
@@ -320,16 +328,93 @@ public final class TranslationPanel extends Composite {
   /**
    * Synchronizes workspace visibility and toolbar presentation.
    */
+  private void updateTranslationView() {
+    boolean setupComplete = isTranslationSetupComplete();
+
+    translationSetupPanel.setVisible(!setupComplete);
+    translationWorkspaceContent.setVisible(setupComplete);
+
+    if (!setupComplete) {
+      return;
+    }
+
+    translationLanguageSidebar.updateLanguages(
+        baseLanguage, languages, selectedLanguage);
+    translationWorkspaceEmptyState.setBaseLanguage(baseLanguage);
+    updateVisibleTranslationWorkspace();
+  }
+
   private void updateVisibleTranslationWorkspace() {
-    boolean staticTranslationsVisible = activeTranslationWorkspaceMode
-            == TranslationWorkspaceMode.STATIC_TRANSLATIONS;
+    boolean hasTranslationLanguage = selectedLanguage != null
+      && languages.contains(selectedLanguage);
+    boolean staticTranslationsVisible = hasTranslationLanguage
+      && activeTranslationWorkspaceMode
+        == TranslationWorkspaceMode.STATIC_TRANSLATIONS;
 
     staticTranslationsWorkspace.setVisible(staticTranslationsVisible);
-    dynamicTranslationsWorkspace.setVisible(!staticTranslationsVisible);
+    dynamicTranslationsWorkspace.setVisible(
+        hasTranslationLanguage && !staticTranslationsVisible);
+    translationWorkspaceEmptyState.setVisible(!hasTranslationLanguage);
 
-    translationWorkspaceToolbar.setStaticTranslationsActive(staticTranslationsVisible);
-    translationWorkspaceToolbar.setDynamicTranslationsActive(!staticTranslationsVisible);
-    translationWorkspaceToolbar.setSelectedLanguage(selectedLanguage);
+    translationWorkspaceToolbar.setStaticTranslationsActive(
+        staticTranslationsVisible);
+    translationWorkspaceToolbar.setDynamicTranslationsActive(
+        hasTranslationLanguage && !staticTranslationsVisible);
+
+    String displayedLanguage = hasTranslationLanguage
+        ? "Translating to: "
+            + TranslationLanguageCatalog.getDisplayLabel(selectedLanguage)
+        : "Base: "
+            + TranslationLanguageCatalog.getDisplayLabel(baseLanguage);
+    translationWorkspaceToolbar.setSelectedLanguage(displayedLanguage);
+  }
+
+  private void completeTranslationSetup() {
+    String selectedBaseLanguage =
+        translationSetupPanel.getSelectedBaseLanguageCode();
+
+    if (selectedBaseLanguage.length() == 0) {
+      String validationMessage =
+          translationSetupPanel.isCustomLanguageSelected()
+              ? "Enter a valid BCP 47 language tag."
+              : "Choose your app's base language.";
+      translationSetupPanel.showValidationMessage(validationMessage);
+      return;
+    }
+
+    baseLanguage = selectedBaseLanguage;
+    refresh();
+    updateTranslationsSetting();
+  }
+
+  private void addSelectedTranslationLanguage() {
+    String language = translationLanguageSidebar.getLanguageToAdd();
+
+    if (language.length() == 0) {
+      String validationMessage =
+          translationLanguageSidebar.isCustomLanguageSelected()
+              ? "Enter a valid BCP 47 language tag."
+              : "Choose a translation language.";
+      translationLanguageSidebar.showValidationMessage(
+          validationMessage);
+      return;
+    }
+
+    if (language.equals(baseLanguage)) {
+      translationLanguageSidebar.showValidationMessage(
+          "The translation language must differ from the base language.");
+      return;
+    }
+
+    if (languages.contains(language)) {
+      translationLanguageSidebar.showValidationMessage(
+          "This translation language has already been added.");
+      return;
+    }
+
+    addLanguage(language, true);
+    refresh();
+    updateTranslationsSetting();
   }
 
   private void applyStaticTranslationsSearch() {
@@ -380,9 +465,13 @@ public final class TranslationPanel extends Composite {
 
   public void refresh() {
     loadSavedTranslations();
-    ensureSelectedLanguage();
-    refreshLanguageListBox();
 
+    if (!isTranslationSetupComplete()) {
+      updateTranslationView();
+      return;
+    }
+
+    ensureSelectedLanguage();
     translationEntries.clear();
     staticTranslationEntryOrder.clear();
 
@@ -416,9 +505,12 @@ public final class TranslationPanel extends Composite {
       }
     }
 
-    refreshStaticTranslationsTable();
-    refreshDynamicTranslationsTable();
-    updateVisibleTranslationWorkspace();
+    if (selectedLanguage != null) {
+      refreshStaticTranslationsTable();
+      refreshDynamicTranslationsTable();
+    }
+
+    updateTranslationView();
   }
 
   private void refreshStaticTranslationsTable() {
@@ -520,7 +612,8 @@ public final class TranslationPanel extends Composite {
 
     dynamicTranslationsTable.setText(0, 0, "Key");
     dynamicTranslationsTable.setText(0, 1, "Base Text");
-    dynamicTranslationsTable.setText(0, 2, selectedLanguage);
+    dynamicTranslationsTable.setText(0, 2,
+        TranslationLanguageCatalog.getDisplayLabel(selectedLanguage));
     dynamicTranslationsTable.setText(0, 3, "Actions");
     dynamicTranslationsTable.getRowFormatter().setStylePrimaryName(
         0, "ode-i18n-table-header");
@@ -660,7 +753,8 @@ public final class TranslationPanel extends Composite {
     table.setText(0, 2, "Type");
     table.setText(0, 3, "Property");
     table.setText(0, 4, "Base Text");
-    table.setText(0, 5, selectedLanguage);
+    table.setText(0, 5,
+        TranslationLanguageCatalog.getDisplayLabel(selectedLanguage));
     table.getRowFormatter().setStylePrimaryName(0, "ode-i18n-table-header");
   }
 
@@ -698,7 +792,15 @@ public final class TranslationPanel extends Composite {
     dialog.center();
   }
 
+  private boolean isTranslationSetupComplete() {
+    return baseLanguage != null && baseLanguage.length() > 0;
+  }
+
   private void updateTranslationsSetting() {
+    if (!isTranslationSetupComplete()) {
+      return;
+    }
+
     projectEditor.changeProjectSettingsProperty(
         SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
         SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS,
@@ -753,6 +855,14 @@ public final class TranslationPanel extends Composite {
         return;
       }
 
+      String savedBaseLanguage =
+          TranslationLanguageCatalog.normalizeLanguageCode(
+              getJsonString(root, "baseLanguage"));
+
+      if (savedBaseLanguage.length() > 0) {
+        baseLanguage = savedBaseLanguage;
+      }
+
       JSONValue languagesValue = root.get("languages");
       if (languagesValue != null && languagesValue.isArray() != null) {
         JSONArray savedLanguages = languagesValue.isArray();
@@ -765,9 +875,6 @@ public final class TranslationPanel extends Composite {
           }
         }
 
-        if (languages.isEmpty()) {
-          languages.add(DEFAULT_LANGUAGE);
-        }
       }
 
       JSONValue entriesValue = root.get("entries");
@@ -918,7 +1025,8 @@ public final class TranslationPanel extends Composite {
   private String exportJson() {
     JSONObject root = new JSONObject();
 
-    root.put("baseLanguage", new JSONString("en"));
+    root.put("baseLanguage",
+      new JSONString(baseLanguage == null ? "" : baseLanguage));
 
     JSONArray languagesJson = new JSONArray();
     for (int i = 0; i < languages.size(); i++) {
@@ -1097,34 +1205,26 @@ public final class TranslationPanel extends Composite {
   }
 
   private void addLanguage(String language, boolean selectLanguage) {
-    if (language == null) {
+    String normalizedLanguage =
+        TranslationLanguageCatalog.normalizeLanguageCode(language);
+
+    if (normalizedLanguage.length() == 0) {
       return;
     }
 
-    language = language.trim();
-
-    if (!isValidLanguageCode(language)) {
-      Window.alert("Use a language code such as hi, es, fr, or pt-BR.");
-      return;
-    }
-
-    if (!languages.contains(language)) {
-      languages.add(language);
+    if (!languages.contains(normalizedLanguage)) {
+      languages.add(normalizedLanguage);
     }
 
     if (selectLanguage) {
-      selectedLanguage = language;
+      selectedLanguage = normalizedLanguage;
     }
-  }
-
-  private boolean isValidLanguageCode(String language) {
-    return language != null
-        && language.matches("[a-z]{2,3}(-[A-Z]{2})?");
   }
 
   private void ensureSelectedLanguage() {
     if (languages.isEmpty()) {
-      languages.add(DEFAULT_LANGUAGE);
+      selectedLanguage = null;
+      return;
     }
 
     if (selectedLanguage == null || !languages.contains(selectedLanguage)) {
@@ -1132,30 +1232,19 @@ public final class TranslationPanel extends Composite {
     }
   }
 
-  private void refreshLanguageListBox() {
-    languageListBox.clear();
-
-    for (int i = 0; i < languages.size(); i++) {
-      String language = languages.get(i);
-      languageListBox.addItem(language);
-
-      if (language.equals(selectedLanguage)) {
-        languageListBox.setSelectedIndex(i);
-      }
-    }
-  }
-
   private void deleteSelectedLanguage() {
     ensureSelectedLanguage();
 
-    if (languages.size() <= 1) {
-      Window.alert("At least one translation language must remain.");
+    if (selectedLanguage == null) {
       return;
     }
 
     String languageToDelete = selectedLanguage;
-    boolean confirmed = Window.confirm("Delete language '" + languageToDelete
-        + "' and all translation values for this language?");
+    String languageLabel =
+        TranslationLanguageCatalog.getDisplayLabel(languageToDelete);
+    boolean confirmed = Window.confirm(
+        "Delete " + languageLabel
+            + " and all translation values for this language?");
 
     if (!confirmed) {
       return;
@@ -1180,7 +1269,7 @@ public final class TranslationPanel extends Composite {
       translationValues.remove(key);
     }
 
-    selectedLanguage = languages.get(0);
+    selectedLanguage = languages.isEmpty() ? null : languages.get(0);
     refresh();
     updateTranslationsSetting();
   }
