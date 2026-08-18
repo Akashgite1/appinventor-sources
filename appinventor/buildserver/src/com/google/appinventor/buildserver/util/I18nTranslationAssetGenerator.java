@@ -29,7 +29,8 @@ public final class I18nTranslationAssetGenerator {
   private static final int MANIFEST_VERSION = 2;
   private static final int LANGUAGE_FILE_VERSION = 1;
   private static final String DEFAULT_BASE_LANGUAGE = "en";
-  private static final String LANGUAGE_CODE_PATTERN = "[a-z]{2,3}(-[A-Z]{2})?";
+  private static final String LANGUAGE_CODE_PATTERN =
+      "[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?";
 
   private I18nTranslationAssetGenerator() {
   }
