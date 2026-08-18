@@ -368,6 +368,76 @@ class I18nTranslationManagerTests: XCTestCase {
         form.TranslateWithValues("message_count", values))
   }
 
+  func testCompanionPreviewChangesLanguageAndReappliesTranslations() {
+    let form = Form(
+        application: Application(),
+        screen: "Screen1")
+    let label = I18nTranslationTarget()
+    label.Text = "Original"
+    form.environment["Label1"] = label
+    Form.activeForm = form
+
+    defer {
+      Form.activeForm = nil
+    }
+
+    let translationsJSON = """
+      {
+        "entries": {
+          "labelText": {
+            "baseText": "Hello",
+            "source": {
+              "screen": "Screen1",
+              "component": "Label1",
+              "property": "Text"
+            },
+            "translations": {
+              "hi": "नमस्ते",
+              "mr": "नमस्कार"
+            }
+          }
+        }
+      }
+      """
+
+    I18nTranslationManager.setPreviewLanguageForCompanion(
+        "hi",
+        translationsJSON)
+
+    XCTAssertEqual("नमस्ते", label.Text)
+
+    I18nTranslationManager.setPreviewLanguageForCompanion(
+        "mr",
+        "")
+
+    XCTAssertEqual("नमस्कार", label.Text)
+  }
+
+  func testFormClearResetsTranslationState() {
+    let form = Form(
+        application: Application(),
+        screen: "Screen1")
+    form.i18nTranslationManager.setPreviewLanguageOverride("hi")
+    form.i18nTranslationManager.loadFromJSON("""
+      {
+        "entries": {
+          "greeting": {
+            "baseText": "Hello",
+            "translations": {
+              "hi": "नमस्ते"
+            }
+          }
+        }
+      }
+      """)
+
+    XCTAssertEqual("नमस्ते", form.Translate("greeting"))
+
+    form.clear()
+
+    XCTAssertEqual("", form.Translate("greeting"))
+  }
+
 }
 
 private enum I18nAssetError: Error {

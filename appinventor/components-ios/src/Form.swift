@@ -298,6 +298,7 @@ let kMinimumToastWait = 10.0
     _linearView.resetView()
     _linearView.removeAllItems()
     initThunks.removeAllObjects()
+    i18nTranslationManager.clear()
     clearComponents()
     defaultPropertyValues()
   }

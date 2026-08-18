@@ -17,7 +17,8 @@ protocol I18nTranslationProvider {
 /**
  * Loads App Inventor i18n data and resolves dynamic translation keys.
  */
-final class I18nTranslationManager {
+@objc(I18nTranslationManager)
+public final class I18nTranslationManager: NSObject {
   private static let manifestVersion = 2
   private static let languageFileVersion = 1
   private static let manifestAsset = "i18n/manifest.json"
@@ -37,6 +38,7 @@ final class I18nTranslationManager {
   init(languageCodeProvider: @escaping LanguageCodeProvider =
       I18nTranslationManager.deviceLanguageCode) {
     self.languageCodeProvider = languageCodeProvider
+    super.init()
   }
 
   func load(from provider: I18nTranslationProvider) {
@@ -49,19 +51,21 @@ final class I18nTranslationManager {
     applyLoadedTranslations(to: provider)
   }
 
-  func loadFromJSON(_ json: String) {
+  @discardableResult
+  func loadFromJSON(_ json: String) -> Bool {
     if json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       clear()
-      return
+      return true
     }
 
     guard let data = json.data(using: .utf8),
         let root = Self.parseRoot(data) else {
-      return
+      return false
     }
 
     clearLoadedTranslations()
     translationsRoot = root
+    return true
   }
 
   func lookupDynamic(_ key: String,
@@ -90,6 +94,31 @@ final class I18nTranslationManager {
     clearLoadedTranslations()
     previewLanguageOverride = ""
   }
+
+  /**
+   * Updates the active Companion form with a preview language.
+   */
+  @objc public static func setPreviewLanguageForCompanion(
+      _ language: String,
+      _ translationsJSON: String) {
+    guard let form = Form.activeForm else {
+      return
+    }
+
+    let manager = form.i18nTranslationManager
+    manager.setPreviewLanguageOverride(language)
+
+    if !translationsJSON
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .isEmpty {
+      if manager.loadFromJSON(translationsJSON) {
+        manager.applyLoadedTranslations(to: form)
+      }
+    } else {
+      manager.applyLoadedTranslations(to: form)
+    }
+  }
+
 
   func applyLoadedTranslations(to provider: I18nTranslationProvider) {
     if let manifest = manifestRoot,
