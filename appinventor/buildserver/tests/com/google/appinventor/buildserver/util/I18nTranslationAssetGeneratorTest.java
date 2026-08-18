@@ -119,20 +119,33 @@ public class I18nTranslationAssetGeneratorTest {
   }
 
   @Test
-  public void supportsRegionSpecificLanguageCodes() throws Exception {
+  public void supportsCanonicalLanguageCodeForms() throws Exception {
+    String[] languages = {
+        "mr", "pt-BR", "zh-Hans", "zh-Hant-TW", "es-419"
+    };
+
+    JSONArray configuredLanguages = new JSONArray();
+    for (String language : languages) {
+      configuredLanguages.put(language);
+    }
+
     JSONObject root = new JSONObject();
     root.put("baseLanguage", "en");
-    root.put("languages", new JSONArray().put("pt-BR"));
+    root.put("languages", configuredLanguages);
     root.put("entries", new JSONObject());
 
     Map<String, String> assets =
         I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
 
-    assertTrue(assets.containsKey("i18n/languages/pt-BR.json"));
-
     JSONObject manifest = new JSONObject(assets.get("i18n/manifest.json"));
-    assertEquals("languages/pt-BR.json",
-        manifest.getJSONObject("languages").getString("pt-BR"));
+    JSONObject languagePaths = manifest.getJSONObject("languages");
+
+    for (String language : languages) {
+      String assetPath = "i18n/languages/" + language + ".json";
+      assertTrue(assets.containsKey(assetPath));
+      assertEquals("languages/" + language + ".json",
+        languagePaths.getString(language));
+    }
   }
 
   @Test(expected = JSONException.class)
@@ -143,6 +156,35 @@ public class I18nTranslationAssetGeneratorTest {
     root.put("entries", new JSONObject());
 
     I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
+  }
+
+  @Test
+  public void rejectsMalformedLanguageCodes() throws Exception {
+    String[] invalidLanguages = {
+        "zh-hans",
+        "en-us",
+        "zh-Hant-tw",
+        "es-41",
+        "en-US-extra",
+        "english",
+        "en/US"
+    };
+
+    for (String language : invalidLanguages) {
+      JSONObject root = new JSONObject();
+      root.put("baseLanguage", "en");
+      root.put("languages", new JSONArray().put(language));
+      root.put("entries", new JSONObject());
+
+      try {
+        I18nTranslationAssetGenerator.generateTranslationAssets(root.toString());
+      } catch (JSONException expected) {
+        continue;
+      }
+
+      throw new AssertionError(
+          "Expected invalid language code to be rejected: " + language);
+    }
   }
 
   private static String createTranslationsJson() throws JSONException {
