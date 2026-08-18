@@ -53,6 +53,7 @@ public class IosBuildFactory extends BuildFactory<IosPaths, IosCompilerContext> 
   @Override
   protected void compileSources(Compiler<IosPaths, IosCompilerContext> compiler) {
     compiler.add(CompileLaunchScreen.class);
+    compiler.add(GenerateI18nTranslationAssets.class);
     compiler.add(BuildAia.class);
     compiler.add(LinkLibraries.class);
   }
