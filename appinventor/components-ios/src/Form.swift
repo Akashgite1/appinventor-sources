@@ -22,6 +22,7 @@ let kMinimumToastWait = 10.0
   fileprivate var applicationIsBeingClosed = false
   @objc public internal(set) var formName: String = ""
   fileprivate var _components: [Component] = []
+  let i18nTranslationManager = I18nTranslationManager()
   fileprivate var _aboutScreen: String?
   fileprivate var _appName: String?
   fileprivate var _accentColor: Int32 = Int32(bitPattern: 0xFFFF4081)
@@ -942,6 +943,9 @@ let kMinimumToastWait = 10.0
   }
 
   @objc open func Initialize() {
+    if !_screenInitialized {
+      i18nTranslationManager.load(from: self)
+    }
     EventDispatcher.dispatchEvent(of: self, called: "Initialize")
     _screenInitialized = true
     if let previousFormValue = formResult {

@@ -9,7 +9,7 @@ import XCTest
 
 class I18nTranslationManagerTests: XCTestCase {
   func testLoadsExactSplitLanguageAndFormatsValues() {
-    let provider = DictionaryI18nAssetProvider([
+    let provider = DictionaryI18nTranslationProvider([
       "i18n/manifest.json": """
         {
           "version": 2,
@@ -45,7 +45,7 @@ class I18nTranslationManagerTests: XCTestCase {
   }
 
   func testFallsBackToLanguageOnlyWhenRegionalFileCannotLoad() {
-    let provider = DictionaryI18nAssetProvider([
+    let provider = DictionaryI18nTranslationProvider([
       "i18n/manifest.json": """
         {
           "version": 2,
@@ -77,7 +77,7 @@ class I18nTranslationManagerTests: XCTestCase {
   }
 
   func testUsesBaseTextWhenDeviceLanguageIsUnavailable() {
-    let provider = DictionaryI18nAssetProvider([
+    let provider = DictionaryI18nTranslationProvider([
       "i18n/manifest.json": """
         {
           "version": 2,
@@ -99,7 +99,7 @@ class I18nTranslationManagerTests: XCTestCase {
   }
 
   func testFallsBackToLegacyAssetWhenManifestIsInvalid() {
-    let provider = DictionaryI18nAssetProvider([
+    let provider = DictionaryI18nTranslationProvider([
       "i18n/manifest.json": """
         {"version": 99, "languages": {}, "entries": {}}
         """,
@@ -124,7 +124,7 @@ class I18nTranslationManagerTests: XCTestCase {
   }
 
   func testRejectsUnsafeLanguageAssetPath() {
-    let provider = DictionaryI18nAssetProvider([
+    let provider = DictionaryI18nTranslationProvider([
       "i18n/manifest.json": """
         {
           "version": 2,
@@ -170,19 +170,173 @@ class I18nTranslationManagerTests: XCTestCase {
 
     XCTAssertEqual("नमस्ते", manager.lookupDynamic("greeting"))
   }
+  func testAppliesSplitTranslationToMatchingComponent() {
+    let label = I18nTranslationTarget()
+    label.Text = "Original"
+    let provider = DictionaryI18nTranslationProvider(
+        [
+          "i18n/manifest.json": """
+            {
+              "version": 2,
+              "languages": {"hi": "languages/hi.json"},
+              "entries": {
+                "labelText": {
+                  "baseText": "Hello",
+                  "source": {
+                    "screen": "Screen1",
+                    "component": "Label1",
+                    "property": "Text"
+                  }
+                }
+              }
+            }
+            """,
+          "i18n/languages/hi.json": """
+            {
+              "version": 1,
+              "language": "hi",
+              "entries": {"labelText": "नमस्ते"}
+            }
+            """
+        ],
+        components: ["Label1": label])
+    let manager = I18nTranslationManager {
+      return "hi-IN"
+    }
+
+    manager.load(from: provider)
+
+    XCTAssertEqual("नमस्ते", label.Text)
+  }
+
+  func testAppliesBaseTextWhenSplitTranslationIsMissing() {
+    let label = I18nTranslationTarget()
+    label.Text = "Original"
+    let provider = DictionaryI18nTranslationProvider(
+        [
+          "i18n/manifest.json": """
+            {
+              "version": 2,
+              "languages": {"hi": "languages/hi.json"},
+              "entries": {
+                "labelText": {
+                  "baseText": "Hello",
+                  "source": {
+                    "screen": "Screen1",
+                    "component": "Label1",
+                    "property": "Text"
+                  }
+                }
+              }
+            }
+            """,
+          "i18n/languages/hi.json": """
+            {
+              "version": 1,
+              "language": "hi",
+              "entries": {}
+            }
+            """
+        ],
+        components: ["Label1": label])
+    let manager = I18nTranslationManager {
+      return "hi"
+    }
+
+    manager.load(from: provider)
+
+    XCTAssertEqual("Hello", label.Text)
+  }
+
+  func testDoesNotApplyEntryForAnotherScreen() {
+    let label = I18nTranslationTarget()
+    label.Text = "Original"
+    let provider = DictionaryI18nTranslationProvider(
+        [
+          "i18n/manifest.json": """
+            {
+              "version": 2,
+              "languages": {"hi": "languages/hi.json"},
+              "entries": {
+                "labelText": {
+                  "baseText": "Hello",
+                  "source": {
+                    "screen": "Screen2",
+                    "component": "Label1",
+                    "property": "Text"
+                  }
+                }
+              }
+            }
+            """,
+          "i18n/languages/hi.json": """
+            {
+              "version": 1,
+              "language": "hi",
+              "entries": {"labelText": "नमस्ते"}
+            }
+            """
+        ],
+        components: ["Label1": label])
+    let manager = I18nTranslationManager {
+      return "hi"
+    }
+
+    manager.load(from: provider)
+
+    XCTAssertEqual("Original", label.Text)
+  }
+
+  func testAppliesLegacyTranslationToMatchingComponent() {
+    let label = I18nTranslationTarget()
+    label.Text = "Original"
+    let provider = DictionaryI18nTranslationProvider(
+        [
+          "i18n/translations.json": """
+            {
+              "entries": {
+                "labelText": {
+                  "baseText": "Hello",
+                  "source": {
+                    "screen": "Screen1",
+                    "component": "Label1",
+                    "property": "Text"
+                  },
+                  "translations": {"hi": "नमस्ते"}
+                }
+              }
+            }
+            """
+        ],
+        components: ["Label1": label])
+    let manager = I18nTranslationManager {
+      return "hi-IN"
+    }
+
+    manager.load(from: provider)
+
+    XCTAssertEqual("नमस्ते", label.Text)
+  }
+
 }
 
 private enum I18nAssetError: Error {
   case missingAsset
 }
 
-private final class DictionaryI18nAssetProvider:
-    I18nTranslationAssetProvider {
+private final class DictionaryI18nTranslationProvider:
+    I18nTranslationProvider {
   private let assets: [String: String]
+  private let components: [String: AnyObject]
   private(set) var openedAssets: [String] = []
+  let i18nFormName: String
 
-  init(_ assets: [String: String]) {
+  init(_ assets: [String: String],
+      formName: String = "Screen1",
+      components: [String: AnyObject] = [:]) {
     self.assets = assets
+    self.i18nFormName = formName
+    self.components = components
   }
 
   func openI18nAsset(_ assetPath: String) throws -> Data {
@@ -195,4 +349,12 @@ private final class DictionaryI18nAssetProvider:
 
     return data
   }
+
+  func lookupI18nComponent(_ componentName: String) -> AnyObject? {
+    return components[componentName]
+  }
+}
+
+private final class I18nTranslationTarget: NSObject {
+  @objc dynamic var Text = ""
 }

@@ -6,10 +6,12 @@
 import Foundation
 
 /**
- * Supplies translation assets to the i18n translation manager.
+ * Supplies Form operations to the i18n translation manager.
  */
-protocol I18nTranslationAssetProvider {
+protocol I18nTranslationProvider {
   func openI18nAsset(_ assetPath: String) throws -> Data
+  var i18nFormName: String { get }
+  func lookupI18nComponent(_ componentName: String) -> AnyObject?
 }
 
 /**
@@ -37,14 +39,14 @@ final class I18nTranslationManager {
     self.languageCodeProvider = languageCodeProvider
   }
 
-  func load(from provider: I18nTranslationAssetProvider) {
+  func load(from provider: I18nTranslationProvider) {
     clearLoadedTranslations()
 
-    if loadSplitAssets(from: provider) {
-      return
+    if !loadSplitAssets(from: provider) {
+      loadLegacyAsset(from: provider)
     }
 
-    loadLegacyAsset(from: provider)
+    applyLoadedTranslations(to: provider)
   }
 
   func loadFromJSON(_ json: String) {
@@ -89,8 +91,27 @@ final class I18nTranslationManager {
     previewLanguageOverride = ""
   }
 
+  func applyLoadedTranslations(to provider: I18nTranslationProvider) {
+    if let manifest = manifestRoot,
+        let entries = manifest["entries"] as? [String: Any] {
+      applySplitTranslations(
+          entries,
+          languageEntries: activeLanguageEntries,
+          to: provider)
+      return
+    }
+
+    if let root = translationsRoot,
+        let entries = root["entries"] as? [String: Any] {
+      applyLegacyTranslations(
+          entries,
+          language: selectLegacyLanguage(),
+          to: provider)
+    }
+  }
+
   private func loadSplitAssets(
-      from provider: I18nTranslationAssetProvider) -> Bool {
+      from provider: I18nTranslationProvider) -> Bool {
     let manifestData: Data
 
     do {
@@ -146,7 +167,7 @@ final class I18nTranslationManager {
   }
 
   private func loadSplitLanguageEntries(
-      from provider: I18nTranslationAssetProvider,
+      from provider: I18nTranslationProvider,
       languagePaths: [String: Any],
       language: String) -> [String: String]? {
     guard let relativePath = languagePaths[language] as? String else {
@@ -189,7 +210,7 @@ final class I18nTranslationManager {
   }
 
   private func loadLegacyAsset(
-      from provider: I18nTranslationAssetProvider) {
+      from provider: I18nTranslationProvider) {
     guard let data = try? provider.openI18nAsset(
         Self.legacyTranslationsAsset),
         let root = Self.parseRoot(data) else {
@@ -233,6 +254,105 @@ final class I18nTranslationManager {
     }
 
     return I18nFormatter.format(template, values: values)
+  }
+
+  private func applySplitTranslations(
+      _ entries: [String: Any],
+      languageEntries: [String: String],
+      to provider: I18nTranslationProvider) {
+    for (key, value) in entries {
+      guard let entry = value as? [String: Any],
+          let source = entry["source"] as? [String: Any] else {
+        continue
+      }
+
+      let screenName = source["screen"] as? String ?? ""
+
+      if !screenName.isEmpty, screenName != provider.i18nFormName {
+        continue
+      }
+
+      let componentName = source["component"] as? String ?? ""
+      let propertyName = source["property"] as? String ?? ""
+      var translatedValue = languageEntries[key] ?? ""
+
+      if translatedValue.isEmpty {
+        translatedValue = Self.baseText(from: entry)
+      }
+
+      guard !translatedValue.isEmpty,
+          let component = provider.lookupI18nComponent(componentName) else {
+        continue
+      }
+
+      _ = Self.applyStringProperty(
+          component,
+          propertyName: propertyName,
+          translatedValue: translatedValue)
+    }
+  }
+
+  private func applyLegacyTranslations(
+      _ entries: [String: Any],
+      language: String,
+      to provider: I18nTranslationProvider) {
+    if language.isEmpty {
+      return
+    }
+
+    for value in entries.values {
+      guard let entry = value as? [String: Any],
+          let source = entry["source"] as? [String: Any] else {
+        continue
+      }
+
+      let screenName = source["screen"] as? String ?? ""
+
+      if !screenName.isEmpty, screenName != provider.i18nFormName {
+        continue
+      }
+
+      let componentName = source["component"] as? String ?? ""
+      let propertyName = source["property"] as? String ?? ""
+      let translations = entry["translations"] as? [String: Any]
+      var translatedValue = translations?[language] as? String ?? ""
+
+      if translatedValue.isEmpty {
+        translatedValue = Self.baseText(from: entry)
+      }
+
+      guard !translatedValue.isEmpty,
+          let component = provider.lookupI18nComponent(componentName) else {
+        continue
+      }
+
+      _ = Self.applyStringProperty(
+          component,
+          propertyName: propertyName,
+          translatedValue: translatedValue)
+    }
+  }
+
+  private static func applyStringProperty(
+      _ component: AnyObject,
+      propertyName: String,
+      translatedValue: String) -> Bool {
+    if propertyName.isEmpty {
+      return false
+    }
+
+    guard let object = component as? NSObject else {
+      return false
+    }
+
+    let setter = NSSelectorFromString("set\(propertyName):")
+
+    guard object.responds(to: setter) else {
+      return false
+    }
+
+    _ = object.perform(setter, with: translatedValue as NSString)
+    return true
   }
 
   private func selectSplitLanguage(
@@ -379,5 +499,36 @@ final class I18nTranslationManager {
         ?? Locale.current.identifier
 
     return identifier.replacingOccurrences(of: "_", with: "-")
+  }
+}
+
+extension Form: I18nTranslationProvider {
+  var i18nFormName: String {
+    return formName
+  }
+
+  func openI18nAsset(_ assetPath: String) throws -> Data {
+    let path = AssetManager.shared.pathForExistingFileAsset(assetPath)
+
+    guard !path.isEmpty else {
+      throw NSError(
+          domain: "AIComponentKit.I18nTranslation",
+          code: 1,
+          userInfo: [NSFilePathErrorKey: assetPath])
+    }
+
+    return try Data(contentsOf: URL(fileURLWithPath: path))
+  }
+
+  func lookupI18nComponent(_ componentName: String) -> AnyObject? {
+    if componentName == formName {
+      return self
+    }
+
+    guard let component = environment[componentName] else {
+      return nil
+    }
+
+    return component as AnyObject
   }
 }
