@@ -942,6 +942,40 @@ let kMinimumToastWait = 10.0
     }
   }
 
+  /**
+   * Looks up a dynamic translation by key.
+   */
+  @objc open func Translate(_ key: String) -> String {
+    return i18nTranslationManager.lookupDynamic(key)
+  }
+
+  /**
+   * Looks up a dynamic translation and replaces named placeholders.
+   */
+  @objc open func TranslateWithValues(
+      _ key: String,
+      _ values: YailDictionary) -> String {
+    return i18nTranslationManager.lookupDynamic(
+        key,
+        values: i18nStringMap(values))
+  }
+
+  private func i18nStringMap(
+      _ values: YailDictionary) -> [String: String] {
+    var result: [String: String] = [:]
+
+    for (key, value) in values {
+      if key is NSNull {
+        continue
+      }
+
+      result[toString(key)] =
+          value is NSNull ? "" : toString(value)
+    }
+
+    return result
+  }
+
   @objc open func Initialize() {
     if !_screenInitialized {
       i18nTranslationManager.load(from: self)

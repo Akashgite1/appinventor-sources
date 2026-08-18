@@ -318,6 +318,56 @@ class I18nTranslationManagerTests: XCTestCase {
     XCTAssertEqual("नमस्ते", label.Text)
   }
 
+  func testFormTranslateUsesLoadedDynamicEntry() {
+    let form = Form()
+    form.i18nTranslationManager.setPreviewLanguageOverride("hi")
+    form.i18nTranslationManager.loadFromJSON("""
+      {
+        "entries": {
+          "welcome_message": {
+            "baseText": "Hello",
+            "translations": {
+              "hi": "नमस्ते"
+            }
+          }
+        }
+      }
+      """)
+
+    XCTAssertEqual(
+        "नमस्ते",
+        form.Translate("welcome_message"))
+    XCTAssertEqual(
+        "",
+        form.Translate("missing_key"))
+  }
+
+  func testFormTranslateWithValuesConvertsDictionaryValues() {
+    let form = Form()
+    form.i18nTranslationManager.setPreviewLanguageOverride("hi")
+    form.i18nTranslationManager.loadFromJSON("""
+      {
+        "entries": {
+          "message_count": {
+            "baseText": "{name}, you have {count} messages.",
+            "translations": {
+              "hi": "{name}, आपके पास {count} संदेश हैं।"
+            }
+          }
+        }
+      }
+      """)
+
+    let values = [
+      "name": "Akash",
+      "count": 5
+    ] as YailDictionary
+
+    XCTAssertEqual(
+        "Akash, आपके पास 5 संदेश हैं।",
+        form.TranslateWithValues("message_count", values))
+  }
+
 }
 
 private enum I18nAssetError: Error {
