@@ -22,6 +22,7 @@ let kMinimumToastWait = 10.0
   fileprivate var applicationIsBeingClosed = false
   @objc public internal(set) var formName: String = ""
   fileprivate var _components: [Component] = []
+  let i18nTranslationManager = I18nTranslationManager()
   fileprivate var _aboutScreen: String?
   fileprivate var _appName: String?
   fileprivate var _accentColor: Int32 = Int32(bitPattern: 0xFFFF4081)
@@ -297,6 +298,7 @@ let kMinimumToastWait = 10.0
     _linearView.resetView()
     _linearView.removeAllItems()
     initThunks.removeAllObjects()
+    i18nTranslationManager.clear()
     clearComponents()
     defaultPropertyValues()
   }
@@ -941,7 +943,44 @@ let kMinimumToastWait = 10.0
     }
   }
 
+  /**
+   * Looks up a dynamic translation by key.
+   */
+  @objc open func Translate(_ key: String) -> String {
+    return i18nTranslationManager.lookupDynamic(key)
+  }
+
+  /**
+   * Looks up a dynamic translation and replaces named placeholders.
+   */
+  @objc open func TranslateWithValues(
+      _ key: String,
+      _ values: YailDictionary) -> String {
+    return i18nTranslationManager.lookupDynamic(
+        key,
+        values: i18nStringMap(values))
+  }
+
+  private func i18nStringMap(
+      _ values: YailDictionary) -> [String: String] {
+    var result: [String: String] = [:]
+
+    for (key, value) in values {
+      if key is NSNull {
+        continue
+      }
+
+      result[toString(key)] =
+          value is NSNull ? "" : toString(value)
+    }
+
+    return result
+  }
+
   @objc open func Initialize() {
+    if !_screenInitialized {
+      i18nTranslationManager.load(from: self)
+    }
     EventDispatcher.dispatchEvent(of: self, called: "Initialize")
     _screenInitialized = true
     if let previousFormValue = formResult {
