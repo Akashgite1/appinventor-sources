@@ -89,9 +89,7 @@ public class YaVisibleComponentsPanel extends SimpleVisibleComponentsPanel<MockF
     listboxI18nPreviewLanguage.addChangeHandler(new ChangeHandler() {
       @Override
       public void onChange(ChangeEvent event) {
-        String translationsJson = projectEditor.getProjectSettingsProperty(
-            SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-            SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
+        String translationsJson = getI18nTranslationsJson();
 
         YaBlocksEditor.setI18nPreviewLanguage(
             listboxI18nPreviewLanguage.getSelectedValue(), translationsJson);
@@ -266,11 +264,17 @@ public class YaVisibleComponentsPanel extends SimpleVisibleComponentsPanel<MockF
     listboxI18nPreviewLanguage.setSelectedIndex(0);
   }
 
+  private String getI18nTranslationsJson() {
+    if (projectEditor instanceof YaProjectEditor) {
+      return ((YaProjectEditor) projectEditor).getI18nTranslationsJson();
+    }
+
+    return "";
+  }
+
   private Set<String> getI18nPreviewLanguages() {
     Set<String> languages = new TreeSet<String>();
-    String savedJson = projectEditor.getProjectSettingsProperty(
-        SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
+    String savedJson = getI18nTranslationsJson();
 
     if (savedJson == null || savedJson.trim().length() == 0) {
       return languages;

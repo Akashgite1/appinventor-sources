@@ -682,6 +682,17 @@ public final class YaProjectEditor extends ProjectEditor implements ProjectChang
     addFileEditorByType(newBlocksEditor);
   }
 
+  /**
+   * Returns the current in-memory translation data.
+   */
+  public String getI18nTranslationsJson() {
+    if (translationEditor == null) {
+      return "";
+    }
+
+    return translationEditor.getRawFileContent();
+  }
+
   private void addTranslationEditor() {
     if (translationEditor != null) {
       return;
@@ -690,12 +701,17 @@ public final class YaProjectEditor extends ProjectEditor implements ProjectChang
     translationEditor = new TranslationEditor(this, projectRootNode);
     insertFileEditor(translationEditor, fileIds.size());
     addFileEditorByType(translationEditor);
-    Ode.getInstance().getDesignToolbar().addTranslationEditor(projectRootNode.getProjectId(),
-        translationEditor);
+    Ode.getInstance().getDesignToolbar().addTranslationEditor(
+        projectRootNode.getProjectId(), translationEditor);
 
-    for (String formName : editorMap.keySet()) {
-      registerTranslationChangeListener(formName);
-    }
+    translationEditor.loadFile(new Command() {
+      @Override
+      public void execute() {
+        for (String formName : editorMap.keySet()) {
+          registerTranslationChangeListener(formName);
+        }
+      }
+    });
   }
 
   /**

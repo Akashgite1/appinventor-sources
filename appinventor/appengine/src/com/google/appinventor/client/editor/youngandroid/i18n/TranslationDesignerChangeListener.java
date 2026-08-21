@@ -22,7 +22,7 @@ public final class TranslationDesignerChangeListener implements DesignerChangeLi
   public void onComponentPropertyChanged(MockComponent component, String propertyName,
       String propertyValue) {
     if (isTranslatableProperty(propertyName)) {
-      translationPanel.refresh();
+      translationPanel.handleDesignerContentChanged();
     }
   }
 
@@ -37,7 +37,7 @@ public final class TranslationDesignerChangeListener implements DesignerChangeLi
 
   @Override
   public void onComponentAdded(MockComponent component) {
-    translationPanel.refresh();
+    translationPanel.handleDesignerContentChanged();
   }
 
   @Override
