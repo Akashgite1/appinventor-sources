@@ -6,7 +6,6 @@
 package com.google.appinventor.client.editor.youngandroid.i18n;
 
 import com.google.appinventor.client.editor.youngandroid.YaProjectEditor;
-import com.google.appinventor.shared.settings.SettingsConstants;
 import com.google.gwt.event.dom.client.ChangeEvent;
 import com.google.gwt.event.dom.client.ChangeHandler;
 import com.google.gwt.event.dom.client.ClickEvent;
@@ -53,18 +52,17 @@ public final class TranslationPanel extends Composite {
   private String selectedLanguage;
   private static final String LOCATOR_SEPARATOR = "\u0000";
   private final Map<String, String> locatorToTranslationKey;
-
-  private boolean savedTranslationsLoaded;
+  private final TranslationEditor translationEditor;
 
   private static final Logger LOG = Logger.getLogger(TranslationPanel.class.getName());
 
-  public TranslationPanel(YaProjectEditor projectEditor) {
+  public TranslationPanel(TranslationEditor translationEditor, YaProjectEditor projectEditor) {
+    this.translationEditor = translationEditor;
     this.projectEditor = projectEditor;
     this.table = new FlexTable();
     this.translationValues = new HashMap<String, Map<String, String>>();
     this.translationEntries = new HashMap<String, TranslationEntry>();
     this.dynamicTranslationEntries = new HashMap<String, DynamicTranslationEntry>();
-    this.savedTranslationsLoaded = false;
     this.languages = new ArrayList<String>();
     this.languages.add(DEFAULT_LANGUAGE);
     this.selectedLanguage = DEFAULT_LANGUAGE;
@@ -148,8 +146,7 @@ public final class TranslationPanel extends Composite {
       public void onClick(ClickEvent event) {
         addLanguage(languageTextBox.getValue(), true);
         languageTextBox.setValue("");
-        refresh();
-        updateTranslationsSetting();
+        handleTranslationsChanged(true);
       }
     });
 
@@ -185,10 +182,7 @@ public final class TranslationPanel extends Composite {
     initWidget(root);
   }
 
-
-
   public void refresh() {
-    loadSavedTranslations();
     ensureSelectedLanguage();
     refreshLanguageListBox();
 
@@ -323,11 +317,12 @@ public final class TranslationPanel extends Composite {
     dialog.center();
   }
 
-  private void updateTranslationsSetting() {
-    projectEditor.changeProjectSettingsProperty(
-        SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS,
-        exportJson());
+  private void handleTranslationsChanged(boolean refreshPanel) {
+    if (refreshPanel) {
+      refresh();
+    }
+
+    translationEditor.scheduleAutoSave();
   }
 
   private String getJsonString(JSONObject object, String name) {
@@ -356,25 +351,26 @@ public final class TranslationPanel extends Composite {
     return values;
   }
 
-  private void loadSavedTranslations() {
-    if (savedTranslationsLoaded) {
+  void loadJson(String savedJson) {
+    translationValues.clear();
+    translationEntries.clear();
+    dynamicTranslationEntries.clear();
+    locatorToTranslationKey.clear();
+
+    languages.clear();
+    languages.add(DEFAULT_LANGUAGE);
+    selectedLanguage = DEFAULT_LANGUAGE;
+
+    if (savedJson == null || savedJson.trim().isEmpty()) {
+      refresh();
       return;
     }
 
-    savedTranslationsLoaded = true;
-
     try {
-      String savedJson = projectEditor.getProjectSettingsProperty(
-          SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-          SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
-
-      if (savedJson == null || savedJson.length() == 0) {
-        return;
-      }
-
       JSONValue parsed = JSONParser.parseStrict(savedJson);
       JSONObject root = parsed.isObject();
       if (root == null) {
+        refresh();
         return;
       }
 
@@ -396,76 +392,85 @@ public final class TranslationPanel extends Composite {
       }
 
       JSONValue entriesValue = root.get("entries");
-      if (entriesValue == null || entriesValue.isObject() == null) {
-        return;
-      }
+      if (entriesValue != null && entriesValue.isObject() != null) {
+        JSONObject entries = entriesValue.isObject();
 
-      JSONObject entries = entriesValue.isObject();
-      for (String key : entries.keySet()) {
-        JSONValue entryValue = entries.get(key);
-        if (entryValue == null || entryValue.isObject() == null) {
-          continue;
-        }
-
-        JSONObject entry = entryValue.isObject();
-
-        String kind = getJsonString(entry, "kind");
-        if ("dynamic".equals(kind)) {
-          String baseText = getJsonString(entry, "baseText");
-          List<String> placeholders = getJsonStringArray(entry, "placeholders");
-
-          dynamicTranslationEntries.put(key,
-              new DynamicTranslationEntry(key, baseText, placeholders));
-        }
-
-        JSONValue sourceValue = entry.get("source");
-        JSONObject source = null;
-        if (sourceValue != null && sourceValue.isObject() != null) {
-          source = sourceValue.isObject();
-        }
-
-        if (source != null) {
-          String screenName = getJsonString(source, "screen");
-          String componentName = getJsonString(source, "component");
-          String propertyName = getJsonString(source, "property");
-
-          if (screenName.length() > 0 && componentName.length() > 0
-              && propertyName.length() > 0) {
-            locatorToTranslationKey.put(makeLocator(screenName, componentName, propertyName),
-                key);
+        for (String key : entries.keySet()) {
+          JSONValue entryValue = entries.get(key);
+          if (entryValue == null || entryValue.isObject() == null) {
+            continue;
           }
-        }
 
-        JSONValue translationsValue = entry.get("translations");
-        if (translationsValue == null || translationsValue.isObject() == null) {
-          continue;
-        }
+          JSONObject entry = entryValue.isObject();
+          String kind = getJsonString(entry, "kind");
 
-        JSONObject translations = translationsValue.isObject();
-        for (String language : translations.keySet()) {
-          JSONValue translatedValue = translations.get(language);
-          if (translatedValue != null && translatedValue.isString() != null) {
-            addLanguage(language, false);
-            setTranslationValue(key, language, translatedValue.isString().stringValue());
+          if ("dynamic".equals(kind)) {
+            String baseText = getJsonString(entry, "baseText");
+            List<String> placeholders =
+                getJsonStringArray(entry, "placeholders");
+
+            dynamicTranslationEntries.put(
+                key,
+                new DynamicTranslationEntry(key, baseText, placeholders));
+          }
+
+          JSONValue sourceValue = entry.get("source");
+          JSONObject source = null;
+
+          if (sourceValue != null && sourceValue.isObject() != null) {
+            source = sourceValue.isObject();
+          }
+
+          if (source != null) {
+            String screenName = getJsonString(source, "screen");
+            String componentName = getJsonString(source, "component");
+            String propertyName = getJsonString(source, "property");
+
+            if (!screenName.isEmpty()
+                && !componentName.isEmpty()
+                && !propertyName.isEmpty()) {
+              locatorToTranslationKey.put(
+                  makeLocator(screenName, componentName, propertyName),
+                  key);
+            }
+          }
+
+          JSONValue translationsValue = entry.get("translations");
+          if (translationsValue == null
+              || translationsValue.isObject() == null) {
+            continue;
+          }
+
+          JSONObject translations = translationsValue.isObject();
+
+          for (String language : translations.keySet()) {
+            JSONValue translatedValue = translations.get(language);
+
+            if (translatedValue != null
+                && translatedValue.isString() != null) {
+              addLanguage(language, false);
+              setTranslationValue(
+                  key,
+                  language,
+                  translatedValue.isString().stringValue());
+            }
           }
         }
       }
     } catch (RuntimeException e) {
       // Ignore invalid saved data for now. The table can still rebuild from the current project.
     }
+    refresh();
   }
 
   /**
-   * Rebuilds translations after a Designer change and schedules project-settings autosave.
+   * Rebuilds translations after a Designer change and schedules autosave.
    */
   public void handleDesignerContentChanged() {
-    refresh();
-    updateTranslationsSetting();
+    handleTranslationsChanged(true);
   }
 
   public void handleComponentRenamed(String screenName, String oldName, String newName) {
-    loadSavedTranslations();
-
     if (oldName == null || oldName.length() == 0 || newName == null || newName.length() == 0
         || oldName.equals(newName)) {
       return;
@@ -496,16 +501,14 @@ public final class TranslationPanel extends Composite {
       changed = true;
     }
 
-    refresh();
-
     if (changed) {
-      updateTranslationsSetting();
+      handleTranslationsChanged(true);
+    } else {
+      refresh();
     }
   }
 
   public void handleComponentRemoved(String screenName, String componentName) {
-    loadSavedTranslations();
-
     if (componentName == null || componentName.length() == 0) {
       return;
     }
@@ -533,14 +536,14 @@ public final class TranslationPanel extends Composite {
       }
     }
 
-    refresh();
-
     if (changed) {
-      updateTranslationsSetting();
+      handleTranslationsChanged(true);
+    } else {
+      refresh();
     }
   }
 
-  private String exportJson() {
+  String exportJson() {
     JSONObject root = new JSONObject();
 
     root.put("baseLanguage", new JSONString("en"));
@@ -621,7 +624,6 @@ public final class TranslationPanel extends Composite {
   }
 
   private void addDynamicTranslationEntry() {
-    loadSavedTranslations();
 
     String key = dynamicKeyTextBox.getValue();
     String baseText = dynamicBaseTextBox.getValue();
@@ -662,8 +664,7 @@ public final class TranslationPanel extends Composite {
     dynamicBaseTextBox.setValue("");
     dynamicPlaceholdersTextBox.setValue("");
 
-    refresh();
-    updateTranslationsSetting();
+    handleTranslationsChanged(true);
   }
 
   private void deleteDynamicTranslationEntry(String key) {
@@ -679,8 +680,7 @@ public final class TranslationPanel extends Composite {
     dynamicTranslationEntries.remove(key);
     translationValues.remove(key);
 
-    refresh();
-    updateTranslationsSetting();
+    handleTranslationsChanged(true);
   }
 
   private boolean isValidDynamicKey(String key) {
@@ -806,8 +806,9 @@ public final class TranslationPanel extends Composite {
     }
 
     selectedLanguage = languages.get(0);
-    refresh();
-    updateTranslationsSetting();
+
+    handleTranslationsChanged(true);
+
   }
 
   private String getTranslationValue(String translationKey, String language) {
@@ -846,7 +847,7 @@ public final class TranslationPanel extends Composite {
       @Override
       public void onChange(ChangeEvent event) {
         setTranslationValue(translationKey, language, textBox.getValue());
-        updateTranslationsSetting();
+        handleTranslationsChanged(false);
       }
     });
 

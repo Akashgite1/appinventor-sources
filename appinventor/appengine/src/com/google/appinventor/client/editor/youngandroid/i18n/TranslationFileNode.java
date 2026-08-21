@@ -1,14 +1,13 @@
 // -*- mode: java; c-basic-offset: 2; -*-
 package com.google.appinventor.client.editor.youngandroid.i18n;
 
+import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.TRANSLATIONS_FILE;
+
 import com.google.appinventor.shared.rpc.project.FileNode;
 import com.google.appinventor.shared.rpc.project.ProjectRootNode;
 
 /**
- * Virtual file node used only to mount the Translation editor into the ProjectEditor deck.
- *
- * This does not represent a real persisted project file yet. Persistence will come later
- * when we decide whether i18n data lives in project settings, .scm, or a dedicated file.
+ * File node representing the project's persisted translation data.
  */
 final class TranslationFileNode extends FileNode {
   private static final long serialVersionUID = 1L;
@@ -16,7 +15,7 @@ final class TranslationFileNode extends FileNode {
   private final ProjectRootNode projectRootNode;
 
   TranslationFileNode(ProjectRootNode projectRootNode) {
-    super("Translations", projectRootNode.getProjectId() + "_translations");
+    super("Translations", TRANSLATIONS_FILE);
     this.projectRootNode = projectRootNode;
   }
 

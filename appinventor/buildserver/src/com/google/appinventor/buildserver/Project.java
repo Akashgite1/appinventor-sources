@@ -6,16 +6,19 @@
 
 package com.google.appinventor.buildserver;
 
+import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.TRANSLATIONS_FILE_NAME;
 import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.YAIL_FILE_EXTENSION;
 
 import com.google.appinventor.components.common.ComponentConstants;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.io.CharStreams;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Logger;
@@ -112,7 +115,6 @@ public final class Project {
   private static final String COLOR_ACCENTTAG = "color.accent";
   private static final String DEFAULT_FILE_SCOPE = "defaultfilescope";
   private static final String BUILD_NUMBER = "buildnumber";
-  private static final String I18N_TRANSLATIONS = "I18nTranslations";
 
   // Do not leave it empty because even though it compiles
   // alright but Android OS can't install it!
@@ -369,7 +371,21 @@ public final class Project {
   }
 
   public String getI18nTranslations() {
-    return properties.getProperty(I18N_TRANSLATIONS, "");
+    File translationsFile = new File(projectDir, TRANSLATIONS_FILE_NAME);
+
+    if (translationsFile.isFile()) {
+      try (InputStreamReader reader = new InputStreamReader(
+          new FileInputStream(translationsFile), StandardCharsets.UTF_8)) {
+        String translationsJson = CharStreams.toString(reader);
+        if (!translationsJson.trim().isEmpty()) {
+          return translationsJson;
+        }
+      } catch (IOException e) {
+        LOG.warning("Unable to read translation file: " + translationsFile);
+      }
+    }
+
+    return "";
   }
 
   /**

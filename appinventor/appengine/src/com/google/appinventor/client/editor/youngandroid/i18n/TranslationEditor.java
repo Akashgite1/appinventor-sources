@@ -1,10 +1,16 @@
 // -*- mode: java; c-basic-offset: 2; -*-
 package com.google.appinventor.client.editor.youngandroid.i18n;
 
+import static com.google.appinventor.client.Ode.MESSAGES;
+
+import com.google.appinventor.client.Ode;
+import com.google.appinventor.client.OdeAsyncCallback;
 import com.google.appinventor.client.editor.FileEditor;
 import com.google.appinventor.client.editor.simple.palette.DropTargetProvider;
 import com.google.appinventor.client.editor.youngandroid.YaProjectEditor;
 import com.google.appinventor.client.widgets.dnd.DropTarget;
+import com.google.appinventor.shared.rpc.project.ChecksumedFileException;
+import com.google.appinventor.shared.rpc.project.ChecksumedLoadFile;
 import com.google.appinventor.shared.rpc.project.ProjectRootNode;
 import com.google.gwt.core.client.Callback;
 import com.google.gwt.user.client.Command;
@@ -16,11 +22,14 @@ public final class TranslationEditor extends FileEditor {
   public static final String EDITOR_TYPE = "TranslationEditor";
   public static final String ENTITY_NAME = "Translations";
 
+  private final YaProjectEditor yaProjectEditor;
   private final TranslationPanel translationPanel;
+  private boolean loadComplete;
 
   public TranslationEditor(YaProjectEditor projectEditor, ProjectRootNode projectRootNode) {
     super(projectEditor, new TranslationFileNode(projectRootNode));
-    translationPanel = new TranslationPanel(projectEditor);
+    yaProjectEditor = projectEditor;
+    translationPanel = new TranslationPanel(this, projectEditor);
     initWidget(translationPanel);
   }
 
@@ -39,10 +48,53 @@ public final class TranslationEditor extends FileEditor {
   }
 
   @Override
-  public void loadFile(Command afterFileLoaded) {
-    if (afterFileLoaded != null) {
-      afterFileLoaded.execute();
+  public void loadFile(final Command afterFileLoaded) {
+    if (loadComplete) {
+      if (afterFileLoaded != null) {
+        afterFileLoaded.execute();
+      }
+      return;
     }
+
+    final long projectId = getProjectId();
+    final String fileId = getFileId();
+
+    OdeAsyncCallback<ChecksumedLoadFile> callback =
+        new OdeAsyncCallback<ChecksumedLoadFile>(MESSAGES.loadError()) {
+          @Override
+          public void onSuccess(ChecksumedLoadFile result) {
+            String fileContent;
+
+            try {
+              fileContent = result.getContent();
+            } catch (ChecksumedFileException e) {
+              onFailure(e);
+              return;
+            }
+
+            translationPanel.loadJson(fileContent);
+            loadComplete = true;
+
+            if (afterFileLoaded != null) {
+              afterFileLoaded.execute();
+            }
+          }
+
+          @Override
+          public void onFailure(Throwable caught) {
+            if (caught instanceof ChecksumedFileException) {
+              Ode.getInstance().recordCorruptProject(
+                  projectId, fileId, caught.getMessage());
+            }
+            super.onFailure(caught);
+          }
+        };
+
+    Ode.getInstance().getProjectService().load2(projectId, fileId, callback);
+  }
+
+  void scheduleAutoSave() {
+    Ode.getInstance().getEditorManager().scheduleAutoSave(this);
   }
 
   @Override
@@ -53,12 +105,15 @@ public final class TranslationEditor extends FileEditor {
   @Override
   public void onShow() {
     super.onShow();
-    translationPanel.refresh();
+
+    if (loadComplete) {
+      translationPanel.refresh();
+    }
   }
 
   @Override
   public String getRawFileContent() {
-    return "";
+    return translationPanel.exportJson();
   }
 
   @Override

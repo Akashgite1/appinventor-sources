@@ -12,6 +12,7 @@ import static com.google.appinventor.common.constants.YoungAndroidStructureConst
 import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.FORM_PROPERTIES_EXTENSION;
 import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.PROJECT_DIRECTORY;
 import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.SRC_FOLDER;
+import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.TRANSLATIONS_FILE;
 import static com.google.appinventor.common.constants.YoungAndroidStructureConstants.YAIL_FILE_EXTENSION;
 import static com.google.appinventor.server.ios.ProvisioningProfileUtil.validateProvisioningProfile;
 
@@ -277,6 +278,7 @@ public final class YoungAndroidProjectService extends CommonProjectService {
     project.setProjectType(YoungAndroidProjectNode.YOUNG_ANDROID_PROJECT_TYPE);
     // Project history not supported in legacy ode new project wizard
     project.addTextFile(new TextFile(PROJECT_PROPERTIES_FILE_NAME, propertiesFileContents));
+    project.addTextFile(new TextFile(TRANSLATIONS_FILE, ""));
     project.addTextFile(new TextFile(formFileName, formFileContents));
     project.addTextFile(new TextFile(blocklyFileName, blocklyFileContents));
     project.addTextFile(new TextFile(yailFileName, yailFileContents));
@@ -365,6 +367,16 @@ public final class YoungAndroidProjectService extends CommonProjectService {
 
     // Retrieve project information
     List<String> sourceFiles = storageIo.getProjectSourceFiles(userId, projectId);
+
+    // Older projects predate the dedicated translation file. Create an empty
+    // file when such a project is opened so the TranslationEditor can migrate
+    // any legacy project-settings data through the normal FileEditor save path.
+    if (!sourceFiles.contains(TRANSLATIONS_FILE)) {
+      storageIo.addSourceFilesToProject(userId, projectId, false, TRANSLATIONS_FILE);
+      storageIo.uploadFileForce(
+          projectId, TRANSLATIONS_FILE, userId, "", StorageUtil.DEFAULT_CHARSET);
+    }
+
     for (String fileId : sourceFiles) {
       if (fileId.startsWith(ASSETS_FOLDER + '/')) {
         if (fileId.startsWith(EXTERNAL_COMPS_FOLDER + '/')) {
