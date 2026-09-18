@@ -8,16 +8,25 @@ package com.google.appinventor.server;
 
 import com.google.appinventor.common.testutils.TestUtils;
 import com.google.appinventor.server.storage.StorageIo;
+import com.google.appinventor.shared.settings.SettingsConstants;
+import com.google.appinventor.shared.storage.StorageUtil;
 import com.google.appinventor.server.storage.StorageIoInstanceHolder;
 import com.google.appinventor.shared.rpc.UploadResponse;
 import com.google.appinventor.shared.rpc.project.UserProject;
 import com.google.appinventor.shared.rpc.project.youngandroid.YoungAndroidProjectNode;
 
 import junitx.framework.ListAssert;
+import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.StringReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.util.List;
+import java.util.Properties;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Test FileImporterImpl.
@@ -170,6 +179,71 @@ public class FileImporterImplTest extends LocalDatastoreTestCase {
         "src/appinventor/ai_joeuser/" + projectName + "/Screen1.yail");
   }
 
+  public void testImportProject_preservesI18nTranslations() throws Exception {
+    String translations = "{\"baseLanguage\":\"en\",\"languages\":[\"hi\"],"
+        + "\"entries\":{\"welcome_user\":{\"kind\":\"dynamic\","
+        + "\"baseText\":\"Hello {name}\",\"placeholders\":[\"name\"],"
+        + "\"translations\":{\"hi\":\"नमस्ते {name}\"}}}}";
+
+    Properties properties = new Properties();
+    properties.setProperty("name", "originalProject");
+    properties.setProperty("main", "appinventor.ai_original.originalProject.Screen1");
+    properties.setProperty(
+        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS,
+        translations);
+
+    ByteArrayOutputStream propertiesBytes = new ByteArrayOutputStream();
+    properties.store(propertiesBytes, "");
+
+    ByteArrayOutputStream archiveBytes = new ByteArrayOutputStream();
+    try (ZipOutputStream archive = new ZipOutputStream(archiveBytes)) {
+        addArchiveEntry(
+            archive,
+            "youngandroidproject/project.properties",
+            propertiesBytes.toByteArray());
+
+        addArchiveEntry(
+            archive,
+            "src/appinventor/ai_original/originalProject/Screen1.scm",
+            new byte[0]);
+    }
+
+    UserProject userProject = fileImporter.importProject(
+        USER_ID,
+        PROJECT_NAME_1,
+        new ByteArrayInputStream(archiveBytes.toByteArray()));
+
+    long projectId = userProject.getProjectId();
+
+    String importedPropertiesText = storageIo.downloadFile(
+        USER_ID,
+        projectId,
+        "youngandroidproject/project.properties",
+        StorageUtil.DEFAULT_CHARSET);
+
+    Properties importedProperties = new Properties();
+    importedProperties.load(new StringReader(importedPropertiesText));
+
+    assertEquals(PROJECT_NAME_1, importedProperties.getProperty("name"));
+    assertEquals(
+        "appinventor.ai_joeuser.project1.Screen1",
+        importedProperties.getProperty("main"));
+
+    assertEquals(
+        translations,
+        importedProperties.getProperty(
+            SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS));
+
+    JSONObject importedSettings = new JSONObject(
+        storageIo.loadProjectSettings(USER_ID, projectId));
+
+    assertEquals(
+        translations,
+        importedSettings
+            .getJSONObject(SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS)
+            .getString(SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS));
+  }
+
   public void testEmptyZip() throws Exception {
     try {
       UserProject userProject = importProjectArchive("EmptyZip.zip", PROJECT_NAME_1);
@@ -196,6 +270,13 @@ public class FileImporterImplTest extends LocalDatastoreTestCase {
     } catch (FileImporterException e) {
       assertEquals(UploadResponse.Status.NOT_PROJECT_ARCHIVE, e.uploadResponse.getStatus());
     }
+  }
+
+  private static void addArchiveEntry(
+        ZipOutputStream archive, String name, byte[] content) throws Exception {
+    archive.putNextEntry(new ZipEntry(name));
+    archive.write(content);
+    archive.closeEntry();
   }
 
 }

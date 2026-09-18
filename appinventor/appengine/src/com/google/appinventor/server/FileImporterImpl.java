@@ -114,11 +114,13 @@ public final class FileImporterImpl implements FileImporter {
             props.load(zin);
             lastOpened = props.getProperty("lastopened", "Screen1");
             String projectColors = props.getProperty("projectcolors", "{}");
+            String i18nTranslations = props.getProperty(SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS, "");
             YoungAndroidSettingsBuilder settingsBuilder = new YoungAndroidSettingsBuilder()
                 .setProjectName(projectName)
                 .setQualifiedFormName(qualifiedFormName)
                 .setDefaultLastOpened(lastOpened)
-                .setProjectColors(projectColors);
+                .setProjectColors(projectColors)
+                .setI18nTranslations(i18nTranslations);
             String content = settingsBuilder.toProperties();
             projectSettings = settingsBuilder.build();
             project.addTextFile(new TextFile(fileName, content));

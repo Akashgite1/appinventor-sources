@@ -287,6 +287,11 @@ public class YoungAndroidSettingsBuilder {
     return this;
   }
 
+  public YoungAndroidSettingsBuilder setI18nTranslations(String i18nTranslations) {
+    this.i18nTranslations = Strings.nullToEmpty(i18nTranslations);
+    return this;
+  }
+
   /**
    * Convert the internal settings into a JSON structure.
    *

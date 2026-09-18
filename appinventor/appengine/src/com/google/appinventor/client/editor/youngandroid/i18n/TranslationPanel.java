@@ -838,20 +838,20 @@ public final class TranslationPanel extends Composite {
       return;
     }
 
-    savedTranslationsLoaded = true;
+    String savedJson = projectEditor.getProjectSettingsProperty(
+        SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
+        SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
+
+    if (savedJson == null || savedJson.trim().length() == 0) {
+      // Project settings may still be loading. Leave the flag unset so a later refresh retries.
+      return;
+    }
 
     try {
-      String savedJson = projectEditor.getProjectSettingsProperty(
-          SettingsConstants.PROJECT_YOUNG_ANDROID_SETTINGS,
-          SettingsConstants.YOUNG_ANDROID_SETTINGS_I18N_TRANSLATIONS);
-
-      if (savedJson == null || savedJson.length() == 0) {
-        return;
-      }
-
       JSONValue parsed = JSONParser.parseStrict(savedJson);
       JSONObject root = parsed.isObject();
       if (root == null) {
+        LOG.warning("Unable to load saved i18n translations: root is not a JSON object");
         return;
       }
 
@@ -932,8 +932,9 @@ public final class TranslationPanel extends Composite {
           }
         }
       }
+      savedTranslationsLoaded = true;
     } catch (RuntimeException e) {
-      // Ignore invalid saved data for now. The table can still rebuild from the current project.
+      LOG.warning("Unable to load saved i18n translations: " + e.getMessage());
     }
   }
 
